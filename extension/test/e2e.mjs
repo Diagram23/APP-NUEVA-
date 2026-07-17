@@ -42,6 +42,10 @@ const mainHtml = `<!doctype html>
   </button>
   <a href="/about">About us</a>
   <a href="/report">Click here</a>
+  <a href="/expand/1" class="cdx-fake-button"><svg width="12" height="12"></svg></a>
+  <a href="/expand/2" class="cdx-fake-button"><svg width="12" height="12"></svg></a>
+  <a href="/expand/3" class="cdx-fake-button"><svg width="12" height="12"></svg></a>
+  <a href="/photo/detail"><img src="https://example.com/link-wrapped-photo.jpg" width="80" height="80"></a>
   <div id="shadow-host"></div>
   <iframe src="/iframe" width="300" height="100"></iframe>
   <script>
@@ -131,7 +135,11 @@ async function main() {
     log("control count", controlCount);
     log("control items", controlItems);
 
-    assert.equal(altCount, "(3)", "expected 3: main doc image, a lazy below-the-fold image, and one in shadow DOM");
+    assert.equal(
+      altCount,
+      "(4)",
+      "expected 4: main doc image, a lazy below-the-fold image, one in shadow DOM, one wrapped in a link"
+    );
     assert.ok(
       altItems.some((t) => t.includes("lazy-below-the-fold")),
       "an unloaded/lazy image (naturalWidth=0 because it hasn't loaded, not because it's tiny) must still be flagged"
@@ -151,7 +159,20 @@ async function main() {
     );
     assert.match(labelSuggestion, /tucorreo@ejemplo\.com/, "label suggestion should come from the same-origin iframe");
     assert.equal(linkCount, "(1)", "only 'Click here' is generic; 'About us' should not be flagged");
-    assert.equal(controlCount, "(1)", "only the empty aria-label button should be flagged");
+    assert.equal(
+      controlCount,
+      "(2)",
+      "the empty aria-label button, plus one grouped entry for the 3 identical cdx-fake-button links " +
+        "— the link wrapping the unlabeled photo must NOT show up a third time, it's already in the alt-text category"
+    );
+    assert.ok(
+      controlItems.some((t) => t.includes("appears 3 times")),
+      "the 3 identical cdx-fake-button links should collapse into one entry with a count, not 3 near-duplicate cards"
+    );
+    assert.ok(
+      !controlItems.some((t) => t.includes("/photo/detail")),
+      "a link whose only content is an image already flagged as missing alt shouldn't be double-reported here"
+    );
     assert.ok(
       !controlItems.some((t) => t.includes("Close dialog")),
       "the shadow DOM button with a real aria-label must not be flagged"

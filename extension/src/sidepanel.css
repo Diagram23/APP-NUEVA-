@@ -246,6 +246,19 @@ body {
   opacity: 0.8;
 }
 
+.category-note {
+  margin: 0 16px 8px;
+  padding: 8px 10px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+}
+
 .results {
   padding: 0 16px 18px;
   display: flex;

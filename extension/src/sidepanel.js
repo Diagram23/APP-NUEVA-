@@ -251,6 +251,22 @@ function scanPageForA11yIssues() {
     return "";
   }
 
+  // If this control's only content is an <img> that's already missing alt
+  // text, it'll show up separately in the alt-text category too — same
+  // root cause, same fix. Skip it here so it isn't reported twice.
+  function wrapsImageMissingAlt(el) {
+    const img = el.querySelector && el.querySelector("img");
+    return !!img && img.getAttribute("alt") === null;
+  }
+
+  // Normalizes an element to a "shape" (tag + sorted class list) so that,
+  // e.g., 20 near-identical citation-expand buttons on a Wikipedia page
+  // collapse into one entry with a count instead of 20 near-duplicate cards.
+  function elementShapeKey(el) {
+    const classes = (el.getAttribute("class") || "").split(/\s+/).filter(Boolean).sort().join(" ");
+    return `${el.tagName}|${classes}`;
+  }
+
   const allElements = collectAllElements(document, []);
 
   // --- Images missing alt text (<img>, <input type="image">, role="img") ---
@@ -408,19 +424,39 @@ function scanPageForA11yIssues() {
     });
 
   // --- Icon-only buttons/links with no accessible name at all ---
-  const unlabeledControls = [];
-  let unlabeledControlsTotal = 0;
+  // Grouped by "shape" (tag + class list) so a page that repeats the same
+  // widget many times (e.g. a citation-expand button on every reference)
+  // shows one entry with a count instead of a wall of near-duplicates.
+  const controlGroups = new Map();
   allElements
     .filter((el) => el.tagName === "BUTTON" || (el.tagName === "A" && el.hasAttribute("href")))
     .forEach((el) => {
       if (!isVisible(el)) return;
       if (accessibleNameHint(el)) return;
-      unlabeledControlsTotal++;
-      cappedPush(unlabeledControls, {
+      // Same root cause as an already-reported missing-alt image — fixing
+      // that image's alt text fixes this control's accessible name too, so
+      // don't report the same underlying problem twice.
+      if (wrapsImageMissingAlt(el)) return;
+
+      const key = elementShapeKey(el);
+      const existing = controlGroups.get(key);
+      if (existing) {
+        existing.count++;
+        return;
+      }
+
+      const href = el.tagName === "A" ? el.getAttribute("href") : null;
+      const identifier = href || (el.textContent || "").trim() || "(no href or text)";
+
+      controlGroups.set(key, {
         tag: el.tagName.toLowerCase(),
-        outerSnippet: el.outerHTML.slice(0, 120),
+        identifier: identifier.length > 70 ? `${identifier.slice(0, 70)}…` : identifier,
+        count: 1,
       });
     });
+
+  const controlGroupList = Array.from(controlGroups.values());
+  const unlabeledControls = controlGroupList.slice(0, MAX_ITEMS);
 
   return {
     missingAlt: { items: missingAlt, truncated: Math.max(0, missingAltTotal - missingAlt.length) },
@@ -430,7 +466,7 @@ function scanPageForA11yIssues() {
     genericLinks: { items: genericLinks, truncated: Math.max(0, genericLinksTotal - genericLinks.length) },
     unlabeledControls: {
       items: unlabeledControls,
-      truncated: Math.max(0, unlabeledControlsTotal - unlabeledControls.length),
+      truncated: Math.max(0, controlGroupList.length - unlabeledControls.length),
     },
   };
 }
@@ -774,7 +810,8 @@ function renderControlResults({ items, truncated }) {
     const textEl = node.querySelector(".item-text");
     const suggestionEl = node.querySelector(".item-suggestion");
 
-    textEl.textContent = `<${item.tag}> ${item.outerSnippet}`;
+    const countNote = item.count > 1 ? ` — appears ${item.count} times with this exact markup` : "";
+    textEl.textContent = `<${item.tag}> ${item.identifier}${countNote}`;
     suggestionEl.textContent =
       "No text, aria-label, or title found — a screen reader can't tell what this does. Add an aria-label describing the action (e.g. aria-label=\"Close menu\").";
 
