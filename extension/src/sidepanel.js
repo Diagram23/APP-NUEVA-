@@ -29,6 +29,13 @@ const scanBtnSpinner = scanBtn.querySelector(".spinner");
 const introHint = document.getElementById("intro-hint");
 const resultsWrapper = document.getElementById("results-wrapper");
 
+const settingsToggle = document.getElementById("settings-toggle");
+const settingsPanel = document.getElementById("settings-panel");
+const apiKeyInput = document.getElementById("api-key-input");
+const apiKeySaveBtn = document.getElementById("api-key-save");
+const apiKeyClearBtn = document.getElementById("api-key-clear");
+const apiKeyStatus = document.getElementById("api-key-status");
+
 const altCount = document.getElementById("alt-count");
 const altResults = document.getElementById("alt-results");
 const altTemplate = document.getElementById("alt-item-template");
@@ -560,8 +567,72 @@ function withTimeout(promise, ms, message) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+// The optional bring-your-own-key path: if the user saved an OpenAI key,
+// use a real vision model for noticeably better descriptions. This costs
+// the user a fraction of a cent per image, billed directly by OpenAI — we
+// never see the key or the charge. Falls back to the free local model
+// whenever no key is set, which stays the default for everyone.
+function getStoredApiKey() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(["openaiApiKey"], (result) => resolve(result.openaiApiKey || null));
+  });
+}
+
+const CAPTION_SYSTEM_PROMPT =
+  "You write concise, accurate alt text for web accessibility. Describe the image in one short, " +
+  'factual sentence (max 20 words) — don\'t guess at details you can\'t clearly verify. If the image ' +
+  'is purely decorative (an icon, spacer, or divider with no informational content), respond with ' +
+  "exactly: DECORATIVE";
+
+async function generateCaptionViaOpenAI(apiKey, imageSrc) {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      max_tokens: 60,
+      messages: [
+        { role: "system", content: CAPTION_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Write alt text for this image." },
+            { type: "image_url", image_url: { url: imageSrc } },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) throw new Error("that API key looks invalid — please check it and save it again.");
+    if (response.status === 429)
+      throw new Error("OpenAI is rate-limiting these requests — please wait a moment and try again.");
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error?.message || `OpenAI returned an error (HTTP ${response.status}).`);
+  }
+
+  const data = await response.json();
+  const caption = data?.choices?.[0]?.message?.content?.trim();
+  if (!caption) throw new Error("OpenAI didn't return a description. Please try again.");
+  return caption;
+}
+
 async function generateAltSuggestion(item) {
   if (!item.src) throw new Error("there's no image file to look at here — this needs a manual check.");
+
+  const apiKey = await getStoredApiKey();
+  if (apiKey) {
+    return await withTimeout(
+      generateCaptionViaOpenAI(apiKey, item.src),
+      30000,
+      "this is taking too long (30s+) — please try again."
+    );
+  }
+
   const captioner = await getCaptioner();
   const output = await withTimeout(
     captioner(item.src),
@@ -671,11 +742,16 @@ function renderAltResults({ items, truncated }) {
       try {
         const caption = await generateAltSuggestion(item);
         const isSmallIcon = item.width <= SMALL_ICON_PX && item.height <= SMALL_ICON_PX;
-        const attrValue = `alt="${caption}"`;
+        const isDecorative = caption.trim().toUpperCase() === "DECORATIVE";
+        const attrValue = isDecorative ? 'alt=""' : `alt="${caption}"`;
 
         suggestionEl.hidden = false;
         renderSuggestion(suggestionEl, {
-          lead: isSmallIcon ? "✨ Suggested description (this looks like a small icon — if it's purely decorative, use alt=\"\" instead):" : "✨ Suggested description:",
+          lead: isDecorative
+            ? "✨ This looks purely decorative — suggested fix:"
+            : isSmallIcon
+              ? "✨ Suggested description (this looks like a small icon — if it's purely decorative, use alt=\"\" instead):"
+              : "✨ Suggested description:",
           code: attrValue,
         });
 
@@ -929,3 +1005,35 @@ async function scanActiveTab() {
 }
 
 scanBtn.addEventListener("click", scanActiveTab);
+
+settingsToggle.addEventListener("click", () => {
+  settingsPanel.hidden = !settingsPanel.hidden;
+});
+
+async function refreshApiKeyStatus() {
+  const key = await getStoredApiKey();
+  if (key) {
+    apiKeyStatus.textContent = "✅ Currently using: your OpenAI key, for higher-quality descriptions.";
+    apiKeyClearBtn.hidden = false;
+    apiKeyInput.value = "";
+    apiKeyInput.placeholder = "sk-… (already saved — enter a new one to replace it)";
+  } else {
+    apiKeyStatus.textContent = "Currently using: the free built-in AI.";
+    apiKeyClearBtn.hidden = true;
+    apiKeyInput.placeholder = "sk-…";
+  }
+}
+
+apiKeySaveBtn.addEventListener("click", async () => {
+  const value = apiKeyInput.value.trim();
+  if (!value) return;
+  await new Promise((resolve) => chrome.storage.local.set({ openaiApiKey: value }, resolve));
+  await refreshApiKeyStatus();
+});
+
+apiKeyClearBtn.addEventListener("click", async () => {
+  await new Promise((resolve) => chrome.storage.local.remove("openaiApiKey", resolve));
+  await refreshApiKeyStatus();
+});
+
+refreshApiKeyStatus();

@@ -223,6 +223,34 @@ async function main() {
     );
     assert.equal(jsdelivrErrors.length, 0, `jsdelivr/CSP errors should never appear: ${jsdelivrErrors.join("; ")}`);
 
+    // --- Settings panel: saving/clearing a bring-your-own-key ---
+    await panel.click("#settings-toggle");
+    const statusBeforeSave = await panel.textContent("#api-key-status");
+    log("api key status before save", statusBeforeSave);
+    assert.match(statusBeforeSave, /free built-in AI/, "should default to the free local model with no key saved");
+
+    await panel.fill("#api-key-input", "sk-test-fake-key-not-a-real-secret");
+    await panel.click("#api-key-save");
+    await panel.waitForFunction(
+      () => document.getElementById("api-key-status").textContent.includes("your OpenAI key"),
+      { timeout: 5000 }
+    );
+    const statusAfterSave = await panel.textContent("#api-key-status");
+    log("api key status after save", statusAfterSave);
+    assert.match(statusAfterSave, /your OpenAI key/, "status should reflect a saved key immediately");
+
+    const clearBtnVisibleAfterSave = await panel.locator("#api-key-clear").isVisible();
+    assert.ok(clearBtnVisibleAfterSave, "the 'remove key' button should appear once a key is saved");
+
+    await panel.click("#api-key-clear");
+    await panel.waitForFunction(
+      () => document.getElementById("api-key-status").textContent.includes("free built-in AI"),
+      { timeout: 5000 }
+    );
+    const statusAfterClear = await panel.textContent("#api-key-status");
+    log("api key status after clear", statusAfterClear);
+    assert.match(statusAfterClear, /free built-in AI/, "clearing the key should revert to the free local model");
+
     console.log("\nAll assertions passed.");
   } finally {
     await context.close();

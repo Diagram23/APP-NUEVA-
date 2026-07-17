@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "name": "AltFix AI — Accessibility Alt Text Auditor",
   "short_name": "AltFix AI",
-  "version": "0.2.0",
-  "description": "Finds images missing alt text and drafts WCAG-ready suggestions using a small AI model that runs fully in your browser. No servers, no API keys, nothing leaves your machine.",
-  "permissions": ["activeTab", "scripting", "sidePanel"],
+  "version": "0.4.0",
+  "description": "Finds images missing alt text and drafts WCAG-ready suggestions using a small AI model that runs fully in your browser. No servers, no required API keys — an optional bring-your-own-key mode is available for higher-quality descriptions.",
+  "permissions": ["activeTab", "scripting", "sidePanel", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"

@@ -9,12 +9,33 @@
     <header class="app-header">
       <div class="brand">
         <img src="icons/icon48.png" alt="" class="brand-mark" />
-        <div>
+        <div class="brand-text">
           <h1>AltFix AI</h1>
           <p class="subtitle">Unlimited in-browser WCAG auditor — no credits, no limits</p>
         </div>
+        <button id="settings-toggle" class="icon-btn" title="AI settings" aria-label="AI settings">⚙️</button>
       </div>
     </header>
+
+    <section id="settings-panel" class="settings-panel" hidden>
+      <p class="settings-title">🧠 Image description quality</p>
+      <p class="settings-copy">
+        By default, descriptions come from a small AI model that runs free, right here in your
+        browser — unlimited, but occasionally imprecise (see the warning below).
+      </p>
+      <p class="settings-copy">
+        If you'd like noticeably better descriptions, you can add your own OpenAI API key. It's
+        used only for this — <strong>your key never leaves your browser except to talk directly to
+        OpenAI</strong>, we never see it or get billed for it. OpenAI charges you directly, a
+        fraction of a cent per image.
+      </p>
+      <div class="settings-row">
+        <input id="api-key-input" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" />
+        <button id="api-key-save" class="btn btn-small">Save</button>
+      </div>
+      <p id="api-key-status" class="settings-status">Currently using: the free built-in AI.</p>
+      <button id="api-key-clear" class="btn btn-small" hidden>Remove key &amp; go back to free AI</button>
+    </section>
 
     <section id="status-banner" class="banner banner-info" hidden></section>
 

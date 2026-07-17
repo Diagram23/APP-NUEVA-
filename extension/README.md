@@ -4,8 +4,22 @@ Chrome extension that audits a webpage against the 5 most common documented
 WCAG failures and drafts fixes for the ones that can be drafted — using a
 small AI model that runs **fully inside the browser** via WebAssembly/WebGPU
 ([transformers.js](https://huggingface.co/docs/transformers.js)) for the one
-check that needs it (alt text). No backend, no API keys, no per-request
-cost, no OS-level hardware gate.
+check that needs it (alt text). No backend, no required API keys, no
+per-request cost by default, no OS-level hardware gate.
+
+## Optional: bring your own OpenAI key
+
+The free local model (`Xenova/vit-gpt2-image-captioning`) is a small,
+dedicated image captioner — it can miss details or get them wrong,
+especially on photos of people or complex scenes (a real limitation, not a
+bug — see "Known limitations" below). For users who want noticeably better
+descriptions, the ⚙️ settings panel lets them paste an OpenAI API key. When
+one is saved, alt-text generation switches to `gpt-4o-mini` (vision-capable,
+a fraction of a cent per image) instead of the local model — billed by
+OpenAI directly to the user, never to us. The key is stored only in
+`chrome.storage.local` and only ever sent to `api.openai.com`. No key set
+(the default) keeps everyone on the free, unlimited local path — this is
+strictly additive, it doesn't touch the zero-cost default.
 
 ## What it checks
 
@@ -164,15 +178,20 @@ extension/
   open shadow roots are covered.
 - Images that require the page's cookies/auth to load may fail to fetch.
 - No persistence — results disappear if you close the panel or reload.
-- The captioning model can't tell "decorative" from "meaningful" the way an
-  instruction-following LLM could — we flag small icon-sized images with a
-  hint instead of a hard classification. Good enough for a human-reviewed
-  suggestion, not perfect.
-- The captioning model is a dedicated photo-captioner, trained mostly on
+- The free local model can't tell "decorative" from "meaningful" the way an
+  instruction-following model could (it's a plain captioner, not a
+  chat/vision LLM) — we flag small icon-sized images with a hint instead of
+  a hard classification. The optional OpenAI path (see above) *can* make
+  this call and returns `alt=""` automatically for decorative images.
+- The free local model is a dedicated photo-captioner, trained mostly on
   everyday photos — it does not do OCR (won't read text baked into an
-  image) and will produce vague/wrong captions for charts, screenshots, and
-  infographics. Always meant to be reviewed before pasting, never applied
-  blind.
+  image) and will produce vague/wrong captions for charts, screenshots,
+  infographics, and sometimes gets details wrong on photos of people. Always
+  meant to be reviewed before pasting, never applied blind — the panel says
+  so directly above every alt-text result. We looked for a better free/local
+  model to swap in and didn't find a clearly-safer alternative that wouldn't
+  risk reintroducing the onnxruntime compatibility issues we just fixed;
+  worth revisiting later, not blocking anything today.
 - Contrast math assumes a solid background color; when it detects a
   background *image* behind the text it says so explicitly rather than
   presenting a falsely-confident number.

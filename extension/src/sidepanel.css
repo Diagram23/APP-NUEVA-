@@ -74,12 +74,90 @@ body {
   gap: 11px;
 }
 
+.brand-text {
+  flex: 1;
+  min-width: 0;
+}
+
 .brand-mark {
   width: 32px;
   height: 32px;
   border-radius: 8px;
   box-shadow: var(--shadow);
   flex-shrink: 0;
+}
+
+.icon-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  width: 30px;
+  height: 30px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.icon-btn:hover {
+  border-color: var(--brand);
+  background: var(--ok-bg);
+}
+
+.settings-panel {
+  margin: 14px 16px 0;
+  padding: 12px 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.settings-title {
+  margin: 0 0 6px;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.settings-copy {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.settings-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.settings-row input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 7px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.settings-row input:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: -1px;
+}
+
+.settings-status {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: var(--fg);
+  font-weight: 600;
 }
 
 .app-header h1 {
