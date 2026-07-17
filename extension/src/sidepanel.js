@@ -433,6 +433,20 @@ function scanPageForA11yIssues() {
 
 const STALL_TIMEOUT_MS = 45000; // no progress at all for this long = treat as hung, not just slow
 
+// Attempt order for loading the model: first let transformers.js pick its
+// own recommended per-component precision (usually the right call), and if
+// that fails for any reason — like the "Missing required scale" session
+// error some quantized decoder exports can throw — fall back to plain
+// fp32 everywhere. Full precision never needs quantization scale metadata
+// at all, so it can't hit that class of error; it's just a bigger download.
+const DTYPE_ATTEMPTS = [undefined, "fp32"];
+
+function attemptLoadPipeline(dtype, onProgress) {
+  const options = { progress_callback: onProgress };
+  if (dtype !== undefined) options.dtype = dtype;
+  return pipeline("image-to-text", CAPTION_MODEL, options);
+}
+
 // Rejects if no progress_callback activity happens for STALL_TIMEOUT_MS —
 // deliberately not a flat overall timeout, since a genuinely slow (but
 // working) connection can legitimately take minutes to pull ~200-300MB.
@@ -453,24 +467,30 @@ function loadCaptionerWithStallGuard() {
       }
     }, 2000);
 
-    pipeline("image-to-text", CAPTION_MODEL, {
-      dtype: "q8",
-      progress_callback: (progress) => {
-        lastActivity = Date.now();
-        if (progress.status === "progress" && progress.total) {
-          const pct = Math.round((progress.loaded / progress.total) * 100);
-          showBanner(`Downloading AI model… ${pct}%`, "info");
+    const onProgress = (progress) => {
+      lastActivity = Date.now();
+      if (progress.status === "progress" && progress.total) {
+        const pct = Math.round((progress.loaded / progress.total) * 100);
+        showBanner(`Downloading AI model… ${pct}%`, "info");
+      }
+    };
+
+    (async () => {
+      let lastError;
+      for (const dtype of DTYPE_ATTEMPTS) {
+        try {
+          const captioner = await attemptLoadPipeline(dtype, onProgress);
+          clearInterval(stallInterval);
+          resolve(captioner);
+          return;
+        } catch (err) {
+          lastError = err;
+          // Try the next, safer fallback instead of giving up immediately.
         }
-      },
-    })
-      .then((captioner) => {
-        clearInterval(stallInterval);
-        resolve(captioner);
-      })
-      .catch((err) => {
-        clearInterval(stallInterval);
-        reject(err);
-      });
+      }
+      clearInterval(stallInterval);
+      reject(lastError);
+    })();
   });
 }
 
