@@ -5,6 +5,15 @@ import { pipeline, env } from "@huggingface/transformers";
 // weights into the extension package itself.
 env.allowLocalModels = false;
 
+// Force the plain single-threaded WASM backend instead of the
+// multi-threaded one. The threaded variant tries to dynamically import an
+// extra loader script from jsdelivr's CDN at runtime, which the extension's
+// CSP (script-src 'self') correctly blocks — that's the
+// "Failed to fetch dynamically imported module" error. Single-threaded is
+// slower but loads entirely from the files we already bundled locally.
+env.backends.onnx.wasm.proxy = false;
+env.backends.onnx.wasm.numThreads = 1;
+
 const CAPTION_MODEL = "Xenova/vit-gpt2-image-captioning";
 const SMALL_ICON_PX = 48; // below this, nudge the user to consider alt=""
 
