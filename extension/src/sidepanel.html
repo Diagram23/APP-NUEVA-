@@ -8,7 +8,7 @@
   <body>
     <header class="app-header">
       <h1>AltFix AI</h1>
-      <p class="subtitle">On-device WCAG alt-text auditor</p>
+      <p class="subtitle">In-browser WCAG alt-text auditor</p>
     </header>
 
     <section id="status-banner" class="banner banner-info" hidden></section>
@@ -38,9 +38,9 @@
     </template>
 
     <footer class="app-footer">
-      <span>Runs 100% locally via Chrome's built-in AI. Nothing is uploaded anywhere.</span>
+      <span>Runs 100% locally in your browser (WebAssembly/WebGPU). Nothing is uploaded anywhere.</span>
     </footer>
 
-    <script src="sidepanel.js"></script>
+    <script type="module" src="sidepanel.js"></script>
   </body>
 </html>

@@ -1,18 +1,20 @@
+import { pipeline, env } from "@huggingface/transformers";
+
+// Always fetch model weights from the Hugging Face Hub (cached by the
+// browser's Cache API after the first download) — never bundle multi-GB
+// weights into the extension package itself.
+env.allowLocalModels = false;
+
+const CAPTION_MODEL = "Xenova/vit-gpt2-image-captioning";
+const SMALL_ICON_PX = 48; // below this, nudge the user to consider alt=""
+
 const statusBanner = document.getElementById("status-banner");
 const scanBtn = document.getElementById("scan-btn");
 const scanSummary = document.getElementById("scan-summary");
 const resultsEl = document.getElementById("results");
 const itemTemplate = document.getElementById("result-item-template");
 
-const ALT_TEXT_PROMPT = [
-  "You are helping a developer fix web accessibility (WCAG 2.1) issues.",
-  "Describe the attached image in one short, concrete sentence (max 15 words) suitable for the HTML alt attribute.",
-  "Do not start with 'Image of' or 'Photo of'. Do not add a trailing period.",
-  "If the image is purely decorative (an icon, spacer, background pattern, or divider with no informational content),",
-  "respond with exactly: DECORATIVE",
-].join(" ");
-
-let modelSession = null;
+let captionerPromise = null;
 
 function showBanner(message, kind = "info") {
   statusBanner.hidden = false;
@@ -42,96 +44,44 @@ function scanPageForMissingAlt() {
     const h = img.naturalHeight || img.height || 0;
     if (w < MIN_SIZE || h < MIN_SIZE) return;
 
-    const figcaption = img.closest("figure")?.querySelector("figcaption")?.textContent?.trim();
-
-    results.push({
-      src,
-      width: w,
-      height: h,
-      nearbyText: (figcaption || img.title || "").slice(0, 200),
-    });
+    results.push({ src, width: w, height: h });
   });
 
   return results;
 }
 
-async function checkAvailability() {
-  if (!("LanguageModel" in self)) {
-    showBanner(
-      "Chrome's built-in AI (Prompt API) isn't available in this browser. You need Chrome 138+ on Windows/macOS/Linux/ChromeOS, with enough free disk space (~22GB) and either a GPU with 4GB+ VRAM or 16GB+ RAM / 4+ CPU cores.",
-      "error"
-    );
-    scanBtn.disabled = true;
-    return false;
-  }
+function getCaptioner() {
+  if (!captionerPromise) {
+    showBanner("Loading the AI model — first run downloads it once (a few hundred MB) and caches it in the browser.", "info");
 
-  try {
-    const availability = await LanguageModel.availability({
-      expectedInputs: [{ type: "image" }],
-    });
-
-    if (availability === "unavailable" || availability === "no") {
-      showBanner(
-        "This device doesn't meet the hardware requirements for Chrome's on-device AI. AltFix AI can't generate suggestions here.",
-        "error"
-      );
-      scanBtn.disabled = true;
-      return false;
-    }
-
-    if (availability === "downloadable" || availability === "after-download") {
-      showBanner(
-        "Chrome needs to download the on-device AI model the first time you generate a suggestion (a few GB, one-time). This can take a while depending on your connection.",
-        "info"
-      );
-      return true;
-    }
-
-    hideBanner();
-    return true;
-  } catch (err) {
-    showBanner(`Could not check AI availability: ${err.message}`, "error");
-    scanBtn.disabled = true;
-    return false;
-  }
-}
-
-async function getSession() {
-  if (modelSession) return modelSession;
-
-  modelSession = await LanguageModel.create({
-    expectedInputs: [{ type: "image" }],
-    initialPrompts: [{ role: "system", content: ALT_TEXT_PROMPT }],
-    monitor(m) {
-      m.addEventListener("downloadprogress", (e) => {
-        const pct = Math.round(e.loaded * 100);
-        showBanner(`Downloading on-device AI model… ${pct}%`, "info");
-        if (pct >= 100) hideBanner();
+    captionerPromise = pipeline("image-to-text", CAPTION_MODEL, {
+      dtype: "q8",
+      progress_callback: (progress) => {
+        if (progress.status === "progress" && progress.total) {
+          const pct = Math.round((progress.loaded / progress.total) * 100);
+          showBanner(`Downloading AI model… ${pct}%`, "info");
+        }
+      },
+    })
+      .then((captioner) => {
+        hideBanner();
+        return captioner;
+      })
+      .catch((err) => {
+        captionerPromise = null; // allow retry on next click
+        throw err;
       });
-    },
-  });
-
-  return modelSession;
+  }
+  return captionerPromise;
 }
 
-async function generateSuggestion(src) {
-  const response = await fetch(src);
-  if (!response.ok) throw new Error(`Could not fetch image (HTTP ${response.status})`);
-  const blob = await response.blob();
-  const bitmap = await createImageBitmap(blob);
-
-  const session = await getSession();
-  const result = await session.prompt([
-    {
-      role: "user",
-      content: [
-        { type: "text", value: "Suggest alt text for this image." },
-        { type: "image", value: bitmap },
-      ],
-    },
-  ]);
-
-  return result.trim();
+async function generateSuggestion(item) {
+  const captioner = await getCaptioner();
+  const output = await captioner(item.src);
+  const first = Array.isArray(output) ? output[0] : output;
+  const caption = first?.generated_text?.trim();
+  if (!caption) throw new Error("The model returned an empty caption.");
+  return caption;
 }
 
 function renderResults(items) {
@@ -160,16 +110,16 @@ function renderResults(items) {
       errorEl.hidden = true;
 
       try {
-        const suggestion = await generateSuggestion(item.src);
-        const isDecorative = suggestion.toUpperCase() === "DECORATIVE";
+        const caption = await generateSuggestion(item);
+        const isSmallIcon = item.width <= SMALL_ICON_PX && item.height <= SMALL_ICON_PX;
 
         suggestionEl.hidden = false;
-        suggestionEl.textContent = isDecorative
-          ? 'Decorative image → use alt=""'
-          : `alt="${suggestion}"`;
+        suggestionEl.textContent = isSmallIcon
+          ? `alt="${caption}" — this is a small icon-sized image; if it's purely decorative, use alt="" instead`
+          : `alt="${caption}"`;
 
         copyBtn.hidden = false;
-        copyBtn.dataset.value = isDecorative ? "" : suggestion;
+        copyBtn.dataset.value = caption;
         generateBtn.textContent = "Regenerate";
       } catch (err) {
         errorEl.hidden = false;
@@ -215,5 +165,3 @@ async function scanActiveTab() {
 }
 
 scanBtn.addEventListener("click", scanActiveTab);
-
-checkAvailability();
