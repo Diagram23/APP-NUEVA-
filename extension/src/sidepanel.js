@@ -20,6 +20,7 @@ env.backends.onnx.wasm.numThreads = 1;
 
 const CAPTION_MODEL = "Xenova/vit-gpt2-image-captioning";
 const SMALL_ICON_PX = 48; // below this, nudge the user to consider alt=""
+const MAX_LIST_ITEMS = 30; // per category, per frame — keeps huge pages usable
 
 const statusBanner = document.getElementById("status-banner");
 const scanBtn = document.getElementById("scan-btn");
@@ -44,6 +45,10 @@ const linkCount = document.getElementById("link-count");
 const linkResults = document.getElementById("link-results");
 const linkTemplate = document.getElementById("link-item-template");
 
+const controlCount = document.getElementById("control-count");
+const controlResults = document.getElementById("control-results");
+const controlTemplate = document.getElementById("control-item-template");
+
 let captionerPromise = null;
 
 function showBanner(message, kind = "info") {
@@ -56,11 +61,17 @@ function hideBanner() {
   statusBanner.hidden = true;
 }
 
-// Injected into the page via chrome.scripting.executeScript. Must be fully
-// self-contained (no references to anything outside this function body).
+// Injected into every frame via chrome.scripting.executeScript. Must be
+// fully self-contained (no references to anything outside this function
+// body) — Chrome serializes the function body and runs it standalone.
 function scanPageForA11yIssues() {
   const MIN_IMG_SIZE = 8; // skip tracking pixels / spacers
-  const MAX_CONTRAST_ITEMS = 25; // cap noise on huge pages
+  const MAX_ITEMS = 30;
+  const MAX_ELEMENTS_WALKED = 8000; // safety cap for huge/SPA pages
+
+  function cappedPush(arr, item) {
+    if (arr.length < MAX_ITEMS) arr.push(item);
+  }
 
   function toRgb(colorStr) {
     const m = colorStr && colorStr.match(/rgba?\(([^)]+)\)/);
@@ -93,6 +104,16 @@ function scanPageForA11yIssues() {
       node = node.parentElement;
     }
     return { r: 255, g: 255, b: 255, a: 1 };
+  }
+
+  function hasBackgroundImageBetween(el) {
+    let node = el;
+    while (node) {
+      const bgImage = getComputedStyle(node).backgroundImage;
+      if (bgImage && bgImage !== "none") return true;
+      node = node.parentElement;
+    }
+    return false;
   }
 
   function hasDirectText(el) {
@@ -170,31 +191,106 @@ function scanPageForA11yIssues() {
     return null;
   }
 
-  // --- Images missing alt text ---
+  // Collect every element in the light DOM plus anything nested inside
+  // *open* shadow roots (closed shadow roots are invisible to any script,
+  // by design — there's no way around that from the outside). Most
+  // component libraries (Lit, Stencil, native <template>-based widgets)
+  // use open mode, so this covers the common case.
+  function collectAllElements(root, out) {
+    if (out.length >= MAX_ELEMENTS_WALKED) return out;
+    const children = root.querySelectorAll ? root.querySelectorAll("*") : [];
+    for (const el of children) {
+      out.push(el);
+      if (out.length >= MAX_ELEMENTS_WALKED) return out;
+      if (el.shadowRoot) collectAllElements(el.shadowRoot, out);
+    }
+    return out;
+  }
+
+  function getElementByIdInRoot(root, id) {
+    if (root.getElementById) return root.getElementById(id);
+    return root.querySelector(`#${CSS.escape(id)}`);
+  }
+
+  function isVisible(el) {
+    const style = getComputedStyle(el);
+    return style.display !== "none" && style.visibility !== "hidden" && parseFloat(style.opacity) !== 0;
+  }
+
+  // Best-effort accessible name: aria-label > aria-labelledby > visible
+  // text > title > alt text of a contained image. Not a full
+  // implementation of the W3C accname spec, but covers the common cases.
+  function accessibleNameHint(el) {
+    const ariaLabel = el.getAttribute("aria-label");
+    if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
+
+    const labelledby = el.getAttribute("aria-labelledby");
+    if (labelledby) {
+      const root = el.getRootNode();
+      const text = labelledby
+        .split(/\s+/)
+        .map((id) => getElementByIdInRoot(root, id)?.textContent?.trim() || "")
+        .join(" ")
+        .trim();
+      if (text) return text;
+    }
+
+    const text = (el.textContent || "").trim();
+    if (text) return text;
+
+    const title = el.getAttribute("title");
+    if (title && title.trim()) return title.trim();
+
+    const innerImgAlt = el.querySelector && el.querySelector("img[alt]")?.getAttribute("alt");
+    if (innerImgAlt && innerImgAlt.trim()) return innerImgAlt.trim();
+
+    return "";
+  }
+
+  const allElements = collectAllElements(document, []);
+
+  // --- Images missing alt text (<img>, <input type="image">, role="img") ---
   const missingAlt = [];
-  Array.from(document.querySelectorAll("img")).forEach((img) => {
-    if (img.getAttribute("alt") !== null) return;
-    const src = img.currentSrc || img.src;
-    if (!src) return;
-    const w = img.naturalWidth || img.width || 0;
-    const h = img.naturalHeight || img.height || 0;
-    if (w < MIN_IMG_SIZE || h < MIN_IMG_SIZE) return;
-    missingAlt.push({ src, width: w, height: h });
+  let missingAltTotal = 0;
+  allElements.forEach((el) => {
+    const tag = el.tagName;
+    const isImg = tag === "IMG";
+    const isImageInput = tag === "INPUT" && (el.getAttribute("type") || "").toLowerCase() === "image";
+    const isRoleImg = el.getAttribute("role") === "img";
+    if (!isImg && !isImageInput && !isRoleImg) return;
+
+    const alt = el.getAttribute("alt");
+    const ariaLabel = el.getAttribute("aria-label");
+    const hasAccessibleText = isRoleImg ? !!(ariaLabel && ariaLabel.trim()) : alt !== null;
+    if (hasAccessibleText) return;
+
+    const src = el.currentSrc || el.src || "";
+    if (isImg || isImageInput) {
+      if (!src) return;
+      const w = el.naturalWidth || el.width || 0;
+      const h = el.naturalHeight || el.height || 0;
+      if (w < MIN_IMG_SIZE || h < MIN_IMG_SIZE) return;
+      missingAltTotal++;
+      cappedPush(missingAlt, { src, width: w, height: h, kind: isImageInput ? "input[type=image]" : "img" });
+    } else {
+      // role="img" on an arbitrary element (often an <svg> or <span> with a
+      // background-image) — no pixel source we can feed to the captioner,
+      // so just flag it for manual review.
+      missingAltTotal++;
+      cappedPush(missingAlt, { src: null, width: 0, height: 0, kind: `role="img" <${tag.toLowerCase()}>` });
+    }
   });
 
   // --- Low-contrast text ---
   const lowContrast = [];
+  let lowContrastTotal = 0;
   const seenContrast = new Set();
-  const allEls = [document.body, ...document.body.querySelectorAll("*")];
 
-  for (const el of allEls) {
-    if (lowContrast.length >= MAX_CONTRAST_ITEMS) break;
-    if (!el || !hasDirectText(el)) continue;
+  for (const el of allElements) {
+    if (!hasDirectText(el)) continue;
+    if (!isVisible(el)) continue;
 
     const style = getComputedStyle(el);
-    if (style.visibility === "hidden" || style.display === "none") continue;
-    if (parseFloat(style.opacity) === 0) continue;
-
     const fg = toRgb(style.color);
     if (!fg) continue;
     const bg = effectiveBackground(el);
@@ -216,7 +312,8 @@ function scanPageForA11yIssues() {
     if (seenContrast.has(key)) continue;
     seenContrast.add(key);
 
-    lowContrast.push({
+    lowContrastTotal++;
+    cappedPush(lowContrast, {
       text,
       tag: el.tagName.toLowerCase(),
       foreground: fgHex,
@@ -224,11 +321,13 @@ function scanPageForA11yIssues() {
       ratio: Math.round(ratio * 100) / 100,
       required,
       suggested: suggestFixedColor(fg, bg, required),
+      uncertain: hasBackgroundImageBetween(el),
     });
   }
 
   // --- Form fields without an accessible label ---
   const missingLabels = [];
+  let missingLabelsTotal = 0;
   const humanize = (s) =>
     s
       .replace(/[_-]+/g, " ")
@@ -237,34 +336,36 @@ function scanPageForA11yIssues() {
       .trim()
       .replace(/^./, (c) => c.toUpperCase());
 
-  Array.from(document.querySelectorAll("input, select, textarea")).forEach((field) => {
-    const type = (field.getAttribute("type") || "").toLowerCase();
-    if (["hidden", "submit", "button", "reset", "image"].includes(type)) return;
+  allElements
+    .filter((el) => ["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName))
+    .forEach((field) => {
+      const type = (field.getAttribute("type") || "").toLowerCase();
+      if (["hidden", "submit", "button", "reset", "image"].includes(type)) return;
+      if (!isVisible(field)) return;
 
-    const style = getComputedStyle(field);
-    if (style.display === "none" || style.visibility === "hidden") return;
+      const root = field.getRootNode();
+      const id = field.getAttribute("id");
+      const hasFor = id && root.querySelector(`label[for="${CSS.escape(id)}"]`);
+      const wrappedInLabel = field.closest("label");
+      const ariaLabel = field.getAttribute("aria-label");
+      const ariaLabelledby = field.getAttribute("aria-labelledby");
+      const hasAriaLabelledby =
+        ariaLabelledby && ariaLabelledby.split(/\s+/).some((refId) => getElementByIdInRoot(root, refId));
 
-    const id = field.getAttribute("id");
-    const hasFor = id && document.querySelector(`label[for="${CSS.escape(id)}"]`);
-    const wrappedInLabel = field.closest("label");
-    const ariaLabel = field.getAttribute("aria-label");
-    const ariaLabelledby = field.getAttribute("aria-labelledby");
-    const hasAriaLabelledby =
-      ariaLabelledby && ariaLabelledby.split(/\s+/).some((refId) => document.getElementById(refId));
+      if (hasFor || wrappedInLabel || (ariaLabel && ariaLabel.trim()) || hasAriaLabelledby) return;
 
-    if (hasFor || wrappedInLabel || (ariaLabel && ariaLabel.trim()) || hasAriaLabelledby) return;
+      const placeholder = field.getAttribute("placeholder");
+      const name = field.getAttribute("name");
+      const suggestion = (placeholder && placeholder.trim()) || (name ? humanize(name) : null);
 
-    const placeholder = field.getAttribute("placeholder");
-    const name = field.getAttribute("name");
-    const suggestion = (placeholder && placeholder.trim()) || (name ? humanize(name) : null);
-
-    missingLabels.push({
-      tag: field.tagName.toLowerCase(),
-      type: type || "text",
-      name: name || "",
-      suggestion,
+      missingLabelsTotal++;
+      cappedPush(missingLabels, {
+        tag: field.tagName.toLowerCase(),
+        type: type || "text",
+        name: name || "",
+        suggestion,
+      });
     });
-  });
 
   // --- Missing page language ---
   const htmlLang = document.documentElement.getAttribute("lang");
@@ -286,14 +387,42 @@ function scanPageForA11yIssues() {
   ]);
 
   const genericLinks = [];
-  Array.from(document.querySelectorAll("a[href]")).forEach((a) => {
-    if (genericLinks.length >= MAX_CONTRAST_ITEMS) return;
-    const text = (a.textContent || "").trim().toLowerCase().replace(/\s+/g, " ");
-    if (!text || !GENERIC_LINK_TEXTS.has(text)) return;
-    genericLinks.push({ text: a.textContent.trim(), href: a.href });
-  });
+  let genericLinksTotal = 0;
+  allElements
+    .filter((el) => el.tagName === "A" && el.hasAttribute("href"))
+    .forEach((a) => {
+      const text = (a.textContent || "").trim().toLowerCase().replace(/\s+/g, " ");
+      if (!text || !GENERIC_LINK_TEXTS.has(text)) return;
+      genericLinksTotal++;
+      cappedPush(genericLinks, { text: a.textContent.trim(), href: a.href });
+    });
 
-  return { missingAlt, lowContrast, missingLabels, missingLang, genericLinks };
+  // --- Icon-only buttons/links with no accessible name at all ---
+  const unlabeledControls = [];
+  let unlabeledControlsTotal = 0;
+  allElements
+    .filter((el) => el.tagName === "BUTTON" || (el.tagName === "A" && el.hasAttribute("href")))
+    .forEach((el) => {
+      if (!isVisible(el)) return;
+      if (accessibleNameHint(el)) return;
+      unlabeledControlsTotal++;
+      cappedPush(unlabeledControls, {
+        tag: el.tagName.toLowerCase(),
+        outerSnippet: el.outerHTML.slice(0, 120),
+      });
+    });
+
+  return {
+    missingAlt: { items: missingAlt, truncated: Math.max(0, missingAltTotal - missingAlt.length) },
+    lowContrast: { items: lowContrast, truncated: Math.max(0, lowContrastTotal - lowContrast.length) },
+    missingLabels: { items: missingLabels, truncated: Math.max(0, missingLabelsTotal - missingLabels.length) },
+    missingLang,
+    genericLinks: { items: genericLinks, truncated: Math.max(0, genericLinksTotal - genericLinks.length) },
+    unlabeledControls: {
+      items: unlabeledControls,
+      truncated: Math.max(0, unlabeledControlsTotal - unlabeledControls.length),
+    },
+  };
 }
 
 function getCaptioner() {
@@ -325,6 +454,7 @@ function getCaptioner() {
 }
 
 async function generateAltSuggestion(item) {
+  if (!item.src) throw new Error("No image source to analyze — needs manual review.");
   const captioner = await getCaptioner();
   const output = await captioner(item.src);
   const first = Array.isArray(output) ? output[0] : output;
@@ -340,8 +470,12 @@ async function copyToClipboard(button, value) {
   setTimeout(() => (button.textContent = original), 1200);
 }
 
-function renderAltResults(items) {
-  altCount.textContent = `(${items.length})`;
+function countLabel(total, truncated) {
+  return truncated > 0 ? `(${total}, showing first ${total - truncated})` : `(${total})`;
+}
+
+function renderAltResults({ items, truncated }) {
+  altCount.textContent = countLabel(items.length + truncated, truncated);
   altResults.innerHTML = "";
 
   if (items.length === 0) {
@@ -358,8 +492,17 @@ function renderAltResults(items) {
     const generateBtn = node.querySelector(".btn-generate");
     const copyBtn = node.querySelector(".btn-copy");
 
-    thumb.src = item.src;
-    srcEl.textContent = item.src;
+    if (item.src) {
+      thumb.src = item.src;
+    } else {
+      thumb.remove();
+    }
+    srcEl.textContent = item.src ? `${item.kind}: ${item.src}` : `${item.kind} — no image source, needs manual review`;
+
+    if (!item.src) {
+      generateBtn.disabled = true;
+      generateBtn.textContent = "No suggestion available";
+    }
 
     generateBtn.addEventListener("click", async () => {
       generateBtn.disabled = true;
@@ -394,8 +537,8 @@ function renderAltResults(items) {
   });
 }
 
-function renderContrastResults(items) {
-  contrastCount.textContent = `(${items.length})`;
+function renderContrastResults({ items, truncated }) {
+  contrastCount.textContent = countLabel(items.length + truncated, truncated);
   contrastResults.innerHTML = "";
 
   if (items.length === 0) {
@@ -417,21 +560,25 @@ function renderContrastResults(items) {
     textEl.textContent = `<${item.tag}> "${item.text}"`;
     metaEl.textContent = `${item.foreground} on ${item.background} — ratio ${item.ratio}:1 (needs ${item.required}:1)`;
 
+    const uncertainNote = item.uncertain
+      ? " ⚠️ There's a background image behind this text — the ratio above only accounts for the fallback color, verify manually."
+      : "";
+
     if (item.suggested) {
-      suggestionEl.textContent = `Suggested text color: ${item.suggested}`;
+      suggestionEl.textContent = `Suggested text color: ${item.suggested}${uncertainNote}`;
       copyBtn.hidden = false;
       copyBtn.dataset.value = item.suggested;
       copyBtn.addEventListener("click", () => copyToClipboard(copyBtn, copyBtn.dataset.value));
     } else {
-      suggestionEl.textContent = "Couldn't fix by adjusting text color alone — try a different background.";
+      suggestionEl.textContent = `Couldn't fix by adjusting text color alone — try a different background.${uncertainNote}`;
     }
 
     contrastResults.appendChild(node);
   });
 }
 
-function renderLabelResults(items) {
-  labelCount.textContent = `(${items.length})`;
+function renderLabelResults({ items, truncated }) {
+  labelCount.textContent = countLabel(items.length + truncated, truncated);
   labelResults.innerHTML = "";
 
   if (items.length === 0) {
@@ -482,8 +629,8 @@ function renderLangResult(issue) {
   langResults.appendChild(node);
 }
 
-function renderLinkResults(items) {
-  linkCount.textContent = `(${items.length})`;
+function renderLinkResults({ items, truncated }) {
+  linkCount.textContent = countLabel(items.length + truncated, truncated);
   linkResults.innerHTML = "";
 
   if (items.length === 0) {
@@ -506,6 +653,43 @@ function renderLinkResults(items) {
   });
 }
 
+function renderControlResults({ items, truncated }) {
+  controlCount.textContent = countLabel(items.length + truncated, truncated);
+  controlResults.innerHTML = "";
+
+  if (items.length === 0) {
+    controlResults.innerHTML = `<p class="empty-state">None found. ✅</p>`;
+    return;
+  }
+
+  items.forEach((item) => {
+    const node = controlTemplate.content.cloneNode(true);
+    const textEl = node.querySelector(".item-text");
+    const suggestionEl = node.querySelector(".item-suggestion");
+
+    textEl.textContent = `<${item.tag}> ${item.outerSnippet}`;
+    suggestionEl.textContent =
+      "No text, aria-label, or title found — a screen reader can't tell what this does. Add an aria-label describing the action (e.g. aria-label=\"Close menu\").";
+
+    controlResults.appendChild(node);
+  });
+}
+
+// Merge same-shaped { items, truncated } results collected from multiple
+// frames (main document + same-origin iframes) into one capped list.
+function mergeListResults(perFrameResults, maxItems) {
+  const allItems = [];
+  let totalTruncated = 0;
+  for (const r of perFrameResults) {
+    if (!r) continue;
+    allItems.push(...r.items);
+    totalTruncated += r.truncated;
+  }
+  const items = allItems.slice(0, maxItems);
+  const truncated = totalTruncated + Math.max(0, allItems.length - items.length);
+  return { items, truncated };
+}
+
 async function scanActiveTab() {
   scanBtn.disabled = true;
   scanBtn.textContent = "Scanning…";
@@ -514,16 +698,26 @@ async function scanActiveTab() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) throw new Error("No active tab.");
 
-    const [{ result }] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
+    // allFrames also reaches same-origin iframes (cross-origin ones are
+    // blocked by the browser regardless — Chrome just silently skips
+    // injecting into those, no error surfaces for them individually).
+    const frameResults = await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
       func: scanPageForA11yIssues,
     });
 
-    renderAltResults(result.missingAlt);
-    renderContrastResults(result.lowContrast);
-    renderLabelResults(result.missingLabels);
-    renderLangResult(result.missingLang);
-    renderLinkResults(result.genericLinks);
+    const mainFrame = frameResults.find((f) => f.frameId === 0) ?? frameResults[0];
+    const results = frameResults.map((f) => f.result).filter(Boolean);
+
+    renderAltResults(mergeListResults(results.map((r) => r.missingAlt), MAX_LIST_ITEMS));
+    renderContrastResults(mergeListResults(results.map((r) => r.lowContrast), MAX_LIST_ITEMS));
+    renderLabelResults(mergeListResults(results.map((r) => r.missingLabels), MAX_LIST_ITEMS));
+    renderLinkResults(mergeListResults(results.map((r) => r.genericLinks), MAX_LIST_ITEMS));
+    renderControlResults(mergeListResults(results.map((r) => r.unlabeledControls), MAX_LIST_ITEMS));
+    // Page language is a top-frame concept — a same-origin iframe missing
+    // its own lang is a much lower-priority, noisier signal, so we only
+    // report it for the main document.
+    renderLangResult(mainFrame?.result?.missingLang ?? null);
   } catch (err) {
     showBanner(`Scan failed: ${err.message}. Some pages (chrome:// URLs, the Web Store) can't be scanned.`, "error");
   } finally {

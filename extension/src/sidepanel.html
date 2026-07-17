@@ -42,6 +42,11 @@
       <div id="link-results" class="results"></div>
     </section>
 
+    <section class="category">
+      <h2>Icon-only buttons/links without a label <span id="control-count" class="count"></span></h2>
+      <div id="control-results" class="results"></div>
+    </section>
+
     <template id="alt-item-template">
       <article class="item">
         <div class="item-preview">
@@ -107,6 +112,15 @@
         <div class="item-body">
           <div class="item-src item-text"></div>
           <div class="item-meta"></div>
+          <div class="item-suggestion"></div>
+        </div>
+      </article>
+    </template>
+
+    <template id="control-item-template">
+      <article class="item">
+        <div class="item-body">
+          <div class="item-src item-text"></div>
           <div class="item-suggestion"></div>
         </div>
       </article>

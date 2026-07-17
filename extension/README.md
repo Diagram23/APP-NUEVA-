@@ -1,9 +1,39 @@
 # AltFix AI
 
-Chrome extension that scans a webpage for `<img>` elements missing `alt` text
-and drafts WCAG-ready suggestions using a small AI model that runs **fully
-inside the browser** via WebAssembly/WebGPU ([transformers.js](https://huggingface.co/docs/transformers.js)).
-No backend, no API keys, no per-request cost, no OS-level hardware gate.
+Chrome extension that audits a webpage against the 5 most common documented
+WCAG failures and drafts fixes for the ones that can be drafted — using a
+small AI model that runs **fully inside the browser** via WebAssembly/WebGPU
+([transformers.js](https://huggingface.co/docs/transformers.js)) for the one
+check that needs it (alt text). No backend, no API keys, no per-request
+cost, no OS-level hardware gate.
+
+## What it checks
+
+1. **Images missing alt text** — `<img>`, `<input type="image">`, and
+   `role="img"` elements. AI-drafted suggestion via the in-browser model.
+2. **Low-contrast text** — real WCAG relative-luminance contrast math (not
+   an approximation), with a suggested fixed color. Flags when the text
+   sits over a background *image* (not just a color) as uncertain, since
+   the ratio then only accounts for the fallback color.
+3. **Form fields without an accessible label** — checks `label[for]`,
+   wrapping `<label>`, `aria-label`, `aria-labelledby`; suggests text from
+   `placeholder`/`name` when nothing else is available.
+4. **Missing page language** (`<html lang="...">`) — flags it and offers a
+   best-guess replacement from `og:locale`/`content-language` meta tags or
+   the browser's language, explicitly labeled as a guess to verify.
+5. **Generic link text** ("click here", "read more", "más información", …
+   in English and Spanish) — flagged for manual review; no auto-suggested
+   replacement, since the right wording depends on context only a human
+   should judge.
+6. **Icon-only buttons/links with no accessible name at all** — e.g. a
+   hamburger-menu or close button that's just an SVG with nothing a screen
+   reader can announce.
+
+Scans the active tab **and same-origin iframes** (`allFrames: true` —
+cross-origin iframes are blocked by the browser itself, no way around
+that), and walks into **open shadow roots**, so modern component-based
+sites (Lit, Stencil, etc.) aren't invisible to it. Closed shadow roots are
+unreachable by any script, by design — not something we can work around.
 
 ## Why this exists
 
@@ -73,6 +103,24 @@ Then:
 Re-run `npm run build` after any change to `src/` and reload the extension
 from `chrome://extensions` (the reload icon on the card).
 
+## Automated regression test
+
+```bash
+npm run build && npm run test:e2e
+```
+
+Loads the real built extension into an actual Chrome via Playwright and
+drives the side panel like a user would — shadow DOM, a same-origin
+iframe, an icon-only button, a background-image contrast case, a generic
+link, all on one synthetic page — asserting each category finds exactly
+what it should (see `test/e2e.mjs`). This is how changes get verified
+without a manual reinstall-and-click cycle every time; it doesn't require
+Chrome to already be on your PATH under a special name — Playwright will
+use your system Chrome (`channel: "chrome"`) unless `E2E_CHROME_PATH` is
+set. It does *not* assert on the actual AI caption text (that needs a real
+network path to Hugging Face to download model weights) — only that
+clicking "Generate suggestion" never reproduces the old CSP/jsdelivr bug.
+
 ## Project structure
 
 ```
@@ -82,21 +130,44 @@ extension/
     manifest.json                  MV3 manifest
     background.js                  Opens the side panel on icon click (no build needed)
     icons/                         Placeholder icons — replace before publishing
+    ort-wasm-simd-threaded.asyncify.{wasm,mjs}
+                                   ONNX Runtime's own WASM engine, bundled locally on
+                                   purpose (see comment in sidepanel.js) so the extension
+                                   never needs to fetch it from jsdelivr's CDN at runtime
   src/
     sidepanel.html/css/js          All the actual logic — scan + AI + UI
+  test/
+    e2e.mjs                        Playwright regression test (see below)
   dist/                            Build output — this is what you load into Chrome (gitignored)
 ```
 
-## Known limitations (MVP)
+## Known limitations (honest, not swept under the rug)
 
-- Only scans `<img>` tags on the currently active tab, one page at a time —
-  no full-site crawl yet.
+- Only the current tab (+ its same-origin iframes) — no full-site crawl yet.
+- Cross-origin iframes are invisible to the scanner; that's a browser
+  security boundary, not something we chose to skip.
+- Closed shadow roots are invisible to any script, including this one —
+  open shadow roots are covered.
 - Images that require the page's cookies/auth to load may fail to fetch.
 - No persistence — results disappear if you close the panel or reload.
 - The captioning model can't tell "decorative" from "meaningful" the way an
   instruction-following LLM could — we flag small icon-sized images with a
   hint instead of a hard classification. Good enough for a human-reviewed
   suggestion, not perfect.
+- The captioning model is a dedicated photo-captioner, trained mostly on
+  everyday photos — it does not do OCR (won't read text baked into an
+  image) and will produce vague/wrong captions for charts, screenshots, and
+  infographics. Always meant to be reviewed before pasting, never applied
+  blind.
+- Contrast math assumes a solid background color; when it detects a
+  background *image* behind the text it says so explicitly rather than
+  presenting a falsely-confident number.
+- Generic-link-text and icon-only-control checks flag the problem but don't
+  draft a replacement — the right wording depends on context only a human
+  should judge, so we didn't fake a fix there.
+- Each result category caps at 30 items per scan (merged across frames) so
+  a page with hundreds of issues doesn't freeze the panel; it says how many
+  more were found beyond that cap.
 - No packaging/monetization yet. Deliberately: validate that people actually
   want this before building billing.
 
