@@ -14,5 +14,8 @@
   "devDependencies": {
     "vite": "^8.1.5",
     "playwright-core": "^1.61.1"
+  },
+  "overrides": {
+    "onnxruntime-web": "1.24.3"
   }
 }

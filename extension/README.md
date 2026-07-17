@@ -75,6 +75,20 @@ not a general instruction-following LLM like Gemini Nano — it always
 generates a caption rather than reasoning about "is this decorative", so we
 handle that with a simple size heuristic instead (see `sidepanel.js`).
 
+## Why `onnxruntime-web` is pinned to 1.24.3 (see `overrides` in package.json)
+
+`@huggingface/transformers` normally pulls in its own pinned dev build of
+`onnxruntime-web` (1.26.0-dev at time of writing). That version has a real,
+reported regression loading certain quantized model weights: session
+creation fails with `Missing required scale ... TransposeDQWeightsForMatMulNBits`
+for this model's word-embedding weights specifically — confirmed as a
+known onnxruntime issue where "1.25 broke it, 1.24 and older worked fine."
+Trying different `dtype` options didn't help, because this specific repo's
+exports all hit the same quantized embedding node regardless of overall
+precision. The `overrides` field forces the last known-good stable release
+instead. If you ever bump `@huggingface/transformers`, re-check whether
+this override is still needed — it may get fixed upstream.
+
 ## Requirements to run/test
 
 Any reasonably modern computer with a reasonably modern Chrome (or
