@@ -1,27 +1,33 @@
 :root {
   color-scheme: light dark;
   --bg: #ffffff;
+  --bg-raised: #f7faf9;
   --fg: #14201d;
   --muted: #5b6b67;
-  --border: #dfe6e3;
-  --brand: #155e4f;
+  --border: #e2e8e6;
+  --brand: #0e6b57;
+  --brand-hover: #0a5745;
   --brand-fg: #ffffff;
   --danger: #b3261e;
   --danger-bg: #fdecea;
-  --ok-bg: #e8f5f0;
+  --ok-bg: #eaf6f2;
+  --shadow: 0 1px 2px rgba(16, 24, 22, 0.06), 0 1px 1px rgba(16, 24, 22, 0.04);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #101613;
-    --fg: #eef3f1;
-    --muted: #9db0aa;
-    --border: #26332e;
-    --brand: #3ea88c;
+    --bg: #0d1512;
+    --bg-raised: #131c19;
+    --fg: #edf3f1;
+    --muted: #98a9a4;
+    --border: #24322d;
+    --brand: #3ecb9f;
+    --brand-hover: #57d6ac;
     --brand-fg: #06120e;
     --danger: #ff8a80;
-    --danger-bg: #3a1d1a;
-    --ok-bg: #16261f;
+    --danger-bg: #33201d;
+    --ok-bg: #142621;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
   }
 }
 
@@ -31,33 +37,56 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
   background: var(--bg);
   color: var(--fg);
-  font-size: 14px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+::selection {
+  background: var(--brand);
+  color: var(--brand-fg);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
+  border: 2px solid var(--bg);
 }
 
 .app-header {
-  padding: 16px 16px 8px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
 }
 
 .app-header h1 {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .subtitle {
-  margin: 2px 0 0;
+  margin: 3px 0 0;
   color: var(--muted);
   font-size: 12px;
 }
 
 .banner {
-  margin: 0 16px 12px;
+  margin: 14px 16px 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 12.5px;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .banner-info {
@@ -74,21 +103,34 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 16px 12px;
+  padding: 16px 16px 14px;
 }
 
 .btn {
   border: none;
-  border-radius: 6px;
+  border-radius: 7px;
   padding: 8px 14px;
-  font-size: 13px;
-  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
   font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.12s ease, opacity 0.12s ease, transform 0.05s ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .btn-primary {
   background: var(--brand);
   color: var(--brand-fg);
+  padding: 9px 16px;
+  font-size: 13px;
+  box-shadow: var(--shadow);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-hover);
 }
 
 .btn-primary:disabled {
@@ -97,52 +139,83 @@ body {
 }
 
 .btn-small {
-  background: transparent;
+  background: var(--bg);
   border: 1px solid var(--border);
   color: var(--fg);
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.btn-small:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.btn-small:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn-generate {
+  border-color: var(--brand);
+  color: var(--brand);
 }
 
 .category {
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .category h2 {
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
   margin: 0;
-  padding: 4px 16px;
+  padding: 10px 16px 6px;
   color: var(--muted);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+}
+
+.category h2 .icon {
+  font-size: 13px;
 }
 
 .count {
-  font-weight: 400;
+  font-weight: 500;
   text-transform: none;
   letter-spacing: normal;
+  opacity: 0.8;
 }
 
 .results {
-  padding: 0 16px 16px;
+  padding: 0 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .item {
   display: flex;
   gap: 10px;
+  background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 10px;
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s ease;
+}
+
+.item:hover {
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--border));
 }
 
 .item-preview {
-  flex: 0 0 56px;
-  height: 56px;
-  border-radius: 6px;
+  flex: 0 0 52px;
+  height: 52px;
+  border-radius: 7px;
   overflow: hidden;
   background: var(--ok-bg);
   display: flex;
@@ -162,19 +235,21 @@ body {
 }
 
 .item-src {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--muted);
   word-break: break-all;
   margin-bottom: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .item-text {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .item-meta {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--muted);
   margin-bottom: 6px;
 }
@@ -183,7 +258,7 @@ body {
   display: flex;
   width: 100%;
   height: 100%;
-  border-radius: 6px;
+  border-radius: 7px;
   overflow: hidden;
   border: 1px solid var(--border);
 }
@@ -193,34 +268,38 @@ body {
 }
 
 .item-suggestion {
-  font-size: 13px;
-  padding: 6px 8px;
+  font-size: 12.5px;
+  padding: 7px 9px;
   background: var(--ok-bg);
-  border-radius: 6px;
-  margin-bottom: 6px;
+  border-radius: 7px;
+  margin-bottom: 7px;
+  line-height: 1.4;
 }
 
 .item-error {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--danger);
-  margin-bottom: 6px;
+  background: var(--danger-bg);
+  padding: 6px 8px;
+  border-radius: 7px;
+  margin-bottom: 7px;
 }
 
 .item-actions {
   display: flex;
-  gap: 8px;
+  gap: 7px;
 }
 
 .app-footer {
-  padding: 12px 16px;
+  padding: 14px 16px 16px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10.5px;
   border-top: 1px solid var(--border);
   margin-top: auto;
 }
 
 .empty-state {
   color: var(--muted);
-  font-size: 13px;
-  padding: 8px 0;
+  font-size: 12.5px;
+  padding: 4px 0 10px;
 }

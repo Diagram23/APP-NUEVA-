@@ -605,15 +605,18 @@ function renderAltResults({ items, truncated }) {
       try {
         const caption = await generateAltSuggestion(item);
         const isSmallIcon = item.width <= SMALL_ICON_PX && item.height <= SMALL_ICON_PX;
+        const attrValue = `alt="${caption}"`;
 
         suggestionEl.hidden = false;
         suggestionEl.textContent = isSmallIcon
-          ? `alt="${caption}" — small icon-sized image; if purely decorative, use alt="" instead`
-          : `alt="${caption}"`;
+          ? `${attrValue} — small icon-sized image; if purely decorative, use alt="" instead`
+          : attrValue;
 
+        // Copies the ready-to-paste attribute, not the bare caption text —
+        // drop it straight into the <img> tag, no manual wrapping needed.
         copyBtn.hidden = false;
         copyBtn.textContent = "Copy";
-        copyBtn.dataset.value = caption;
+        copyBtn.dataset.value = attrValue;
         generateBtn.textContent = "Regenerate";
       } catch (err) {
         errorEl.hidden = false;
@@ -660,8 +663,10 @@ function renderContrastResults({ items, truncated }) {
 
     if (item.suggested) {
       suggestionEl.textContent = `Suggested text color: ${item.suggested}${uncertainNote}`;
+      // Copies a ready-to-paste CSS declaration, not the bare hex value.
       copyBtn.hidden = false;
-      copyBtn.dataset.value = item.suggested;
+      copyBtn.textContent = "Copy CSS";
+      copyBtn.dataset.value = `color: ${item.suggested};`;
       copyBtn.addEventListener("click", () => copyToClipboard(copyBtn, copyBtn.dataset.value));
     } else {
       suggestionEl.textContent = `Couldn't fix by adjusting text color alone — try a different background.${uncertainNote}`;
@@ -689,9 +694,13 @@ function renderLabelResults({ items, truncated }) {
     srcEl.textContent = `<${item.tag}${item.name ? ` name="${item.name}"` : ""} type="${item.type}">`;
 
     if (item.suggestion) {
-      suggestionEl.textContent = `Suggested label: "${item.suggestion}"`;
+      const attrValue = `aria-label="${item.suggestion}"`;
+      suggestionEl.textContent = `Suggested: ${attrValue}`;
+      // Copies the ready-to-paste attribute — drop it straight onto the
+      // existing <input>/<select>/<textarea> tag, no new <label> element needed.
       copyBtn.hidden = false;
-      copyBtn.dataset.value = item.suggestion;
+      copyBtn.textContent = "Copy aria-label";
+      copyBtn.dataset.value = attrValue;
       copyBtn.addEventListener("click", () => copyToClipboard(copyBtn, copyBtn.dataset.value));
     } else {
       suggestionEl.textContent = "No placeholder or name attribute to suggest from — needs manual review.";
