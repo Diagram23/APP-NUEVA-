@@ -547,6 +547,19 @@ function countLabel(total, truncated) {
   return truncated > 0 ? `(${total}, showing first ${total - truncated})` : `(${total})`;
 }
 
+// Disables (or re-enables) every "Generate suggestion" button except the
+// one currently running, so it's visually obvious only one caption request
+// runs at a time — the model is a single shared, single-threaded instance,
+// so a second click never actually ran in parallel, it just waited
+// invisibly until now.
+function setOtherAltButtonsDisabled(exceptBtn, disabled) {
+  altResults.querySelectorAll(".btn-generate").forEach((btn) => {
+    if (btn === exceptBtn) return;
+    if (btn.dataset.permanentlyDisabled === "true") return;
+    btn.disabled = disabled;
+  });
+}
+
 function renderAltResults({ items, truncated }) {
   altCount.textContent = countLabel(items.length + truncated, truncated);
   altResults.innerHTML = "";
@@ -575,12 +588,19 @@ function renderAltResults({ items, truncated }) {
     if (!item.src) {
       generateBtn.disabled = true;
       generateBtn.textContent = "No suggestion available";
+      generateBtn.dataset.permanentlyDisabled = "true";
     }
 
     generateBtn.addEventListener("click", async () => {
+      const previousLabel = generateBtn.textContent;
       generateBtn.disabled = true;
       generateBtn.textContent = "Generating…";
       errorEl.hidden = true;
+      // Only one caption can actually run at a time (single shared,
+      // single-threaded model) — clicking several buttons in a row used to
+      // silently queue them behind each other with no indication why the
+      // later ones seemed stuck. Make that explicit instead.
+      setOtherAltButtonsDisabled(generateBtn, true);
 
       try {
         const caption = await generateAltSuggestion(item);
@@ -601,6 +621,7 @@ function renderAltResults({ items, truncated }) {
         generateBtn.textContent = "Retry";
       } finally {
         generateBtn.disabled = false;
+        setOtherAltButtonsDisabled(generateBtn, false);
       }
     });
 

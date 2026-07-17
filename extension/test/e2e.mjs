@@ -157,8 +157,19 @@ async function main() {
     // seconds it should either succeed or show a visible error — the
     // exact complaint that led to the stall-timeout fix was "I click it
     // and nothing happens at all".
-    const generateBtn = panel.locator("#alt-results .btn-generate").first();
+    const generateBtn = panel.locator("#alt-results .btn-generate").nth(0);
+    const secondGenerateBtn = panel.locator("#alt-results .btn-generate").nth(1);
+
     await generateBtn.click();
+
+    // Only one caption request should ever run at a time (single shared,
+    // single-threaded model) — clicking a second button while the first is
+    // in flight used to silently queue it with zero visible indication,
+    // which read as "the button just doesn't work" when the wait got long.
+    const secondDisabledDuringFirst = await secondGenerateBtn.isDisabled();
+    log("second generate button disabled while first is in flight", secondDisabledDuringFirst);
+    assert.ok(secondDisabledDuringFirst, "other generate buttons must be disabled while one request is in flight");
+
     await panel.waitForFunction(
       () => {
         const btn = document.querySelector("#alt-results .btn-generate");
@@ -167,6 +178,14 @@ async function main() {
       },
       { timeout: 10000 }
     );
+
+    const secondDisabledAfterFirst = await secondGenerateBtn.isDisabled();
+    log("second generate button disabled after first finishes", secondDisabledAfterFirst);
+    assert.ok(
+      !secondDisabledAfterFirst,
+      "other generate buttons must re-enable once the in-flight request finishes"
+    );
+
     const btnTextAfter = await generateBtn.textContent();
     const errorVisible = await panel.locator("#alt-results .item-error").first().isVisible();
     log("generate button text after click", btnTextAfter);
