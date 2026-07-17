@@ -153,8 +153,28 @@ async function main() {
 
     // Generate-suggestion click shouldn't hit the old CSP/jsdelivr bug,
     // whatever else happens to it in this environment (network permitting).
-    await panel.click("#alt-results .btn-generate >> nth=0");
-    await panel.waitForTimeout(5000);
+    // It also must never leave the button silently stuck: within a few
+    // seconds it should either succeed or show a visible error — the
+    // exact complaint that led to the stall-timeout fix was "I click it
+    // and nothing happens at all".
+    const generateBtn = panel.locator("#alt-results .btn-generate").first();
+    await generateBtn.click();
+    await panel.waitForFunction(
+      () => {
+        const btn = document.querySelector("#alt-results .btn-generate");
+        const err = document.querySelector("#alt-results .item-error");
+        return btn && (btn.textContent !== "Generating…" || (err && !err.hidden));
+      },
+      { timeout: 10000 }
+    );
+    const btnTextAfter = await generateBtn.textContent();
+    const errorVisible = await panel.locator("#alt-results .item-error").first().isVisible();
+    log("generate button text after click", btnTextAfter);
+    log("error box visible after click", errorVisible);
+    assert.ok(
+      btnTextAfter !== "Generating…" || errorVisible,
+      "the button must not stay on 'Generating…' with no visible feedback at all"
+    );
     assert.equal(jsdelivrErrors.length, 0, `jsdelivr/CSP errors should never appear: ${jsdelivrErrors.join("; ")}`);
 
     console.log("\nAll assertions passed.");

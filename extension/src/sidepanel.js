@@ -431,6 +431,49 @@ function scanPageForA11yIssues() {
   };
 }
 
+const STALL_TIMEOUT_MS = 45000; // no progress at all for this long = treat as hung, not just slow
+
+// Rejects if no progress_callback activity happens for STALL_TIMEOUT_MS —
+// deliberately not a flat overall timeout, since a genuinely slow (but
+// working) connection can legitimately take minutes to pull ~200-300MB.
+// Without this, a hung fetch (bad network, blocked host, etc.) left the
+// button stuck on "Generating…" forever with no feedback at all — which is
+// indistinguishable from the button being broken.
+function loadCaptionerWithStallGuard() {
+  return new Promise((resolve, reject) => {
+    let lastActivity = Date.now();
+    const stallInterval = setInterval(() => {
+      if (Date.now() - lastActivity > STALL_TIMEOUT_MS) {
+        clearInterval(stallInterval);
+        reject(
+          new Error(
+            "Download stalled — no progress for 45+ seconds. Check your internet connection and try again."
+          )
+        );
+      }
+    }, 2000);
+
+    pipeline("image-to-text", CAPTION_MODEL, {
+      dtype: "q8",
+      progress_callback: (progress) => {
+        lastActivity = Date.now();
+        if (progress.status === "progress" && progress.total) {
+          const pct = Math.round((progress.loaded / progress.total) * 100);
+          showBanner(`Downloading AI model… ${pct}%`, "info");
+        }
+      },
+    })
+      .then((captioner) => {
+        clearInterval(stallInterval);
+        resolve(captioner);
+      })
+      .catch((err) => {
+        clearInterval(stallInterval);
+        reject(err);
+      });
+  });
+}
+
 function getCaptioner() {
   if (!captionerPromise) {
     showBanner(
@@ -438,15 +481,7 @@ function getCaptioner() {
       "info"
     );
 
-    captionerPromise = pipeline("image-to-text", CAPTION_MODEL, {
-      dtype: "q8",
-      progress_callback: (progress) => {
-        if (progress.status === "progress" && progress.total) {
-          const pct = Math.round((progress.loaded / progress.total) * 100);
-          showBanner(`Downloading AI model… ${pct}%`, "info");
-        }
-      },
-    })
+    captionerPromise = loadCaptionerWithStallGuard()
       .then((captioner) => {
         hideBanner();
         return captioner;
@@ -459,10 +494,22 @@ function getCaptioner() {
   return captionerPromise;
 }
 
+function withTimeout(promise, ms, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function generateAltSuggestion(item) {
   if (!item.src) throw new Error("No image source to analyze — needs manual review.");
   const captioner = await getCaptioner();
-  const output = await captioner(item.src);
+  const output = await withTimeout(
+    captioner(item.src),
+    30000,
+    "Timed out analyzing the image after 30s — the image host may be slow or unreachable. Try again."
+  );
   const first = Array.isArray(output) ? output[0] : output;
   const caption = first?.generated_text?.trim();
   if (!caption) throw new Error("The model returned an empty caption.");
