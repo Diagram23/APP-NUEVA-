@@ -360,7 +360,35 @@ body {
   background: var(--ok-bg);
   border-radius: 7px;
   margin-bottom: 7px;
-  line-height: 1.4;
+  line-height: 1.5;
+}
+
+.suggestion-lead {
+  display: block;
+  color: var(--fg);
+  margin-bottom: 4px;
+}
+
+.suggestion-note {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+/* A distinctly-styled "ready to paste" code fragment — kept visually
+   separate from the surrounding sentence so it reads as an intentional
+   snippet, not as stray code mixed into plain prose. */
+.code-chip {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand) 30%, transparent);
+  color: var(--fg);
+  padding: 3px 7px;
+  border-radius: 6px;
+  word-break: break-word;
 }
 
 .item-error {

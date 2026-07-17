@@ -500,9 +500,7 @@ function loadCaptionerWithStallGuard() {
       if (Date.now() - lastActivity > STALL_TIMEOUT_MS) {
         clearInterval(stallInterval);
         reject(
-          new Error(
-            "Download stalled — no progress for 45+ seconds. Check your internet connection and try again."
-          )
+          new Error("the download seems stuck (no progress for 45+ seconds) — please check your internet connection and try again.")
         );
       }
     }, 2000);
@@ -511,7 +509,7 @@ function loadCaptionerWithStallGuard() {
       lastActivity = Date.now();
       if (progress.status === "progress" && progress.total) {
         const pct = Math.round((progress.loaded / progress.total) * 100);
-        showBanner(`Downloading AI model… ${pct}%`, "info");
+        showBanner(`⏳ Downloading the AI model… ${pct}%`, "info");
       }
     };
 
@@ -537,7 +535,7 @@ function loadCaptionerWithStallGuard() {
 function getCaptioner() {
   if (!captionerPromise) {
     showBanner(
-      "Loading the AI model — first run downloads it once (a few hundred MB) and caches it in the browser.",
+      "⏳ Setting up the AI model — this only happens once (a few hundred MB), then it's instant from now on.",
       "info"
     );
 
@@ -563,16 +561,16 @@ function withTimeout(promise, ms, message) {
 }
 
 async function generateAltSuggestion(item) {
-  if (!item.src) throw new Error("No image source to analyze — needs manual review.");
+  if (!item.src) throw new Error("there's no image file to look at here — this needs a manual check.");
   const captioner = await getCaptioner();
   const output = await withTimeout(
     captioner(item.src),
     30000,
-    "Timed out analyzing the image after 30s — the image host may be slow or unreachable. Try again."
+    "this is taking too long (30s+) — the image's source might be slow or unreachable. Please try again."
   );
   const first = Array.isArray(output) ? output[0] : output;
   const caption = first?.generated_text?.trim();
-  if (!caption) throw new Error("The model returned an empty caption.");
+  if (!caption) throw new Error("the model didn't return a description. Please try again.");
   return caption;
 }
 
@@ -585,6 +583,33 @@ async function copyToClipboard(button, value) {
 
 function countLabel(total, truncated) {
   return truncated > 0 ? `(${total}, showing first ${total - truncated})` : `(${total})`;
+}
+
+// Renders a suggestion as a warm, natural sentence (leadText) followed by
+// a visually distinct "ready to paste" code fragment (codeText), with an
+// optional smaller note underneath. Keeping the code part visually
+// separate from the prose is deliberate — mixing raw code into a plain
+// sentence with no distinction is what read as unpolished before.
+function renderSuggestion(container, { lead, code, note } = {}) {
+  container.innerHTML = "";
+  if (lead) {
+    const leadEl = document.createElement("span");
+    leadEl.className = "suggestion-lead";
+    leadEl.textContent = lead;
+    container.appendChild(leadEl);
+  }
+  if (code) {
+    const codeEl = document.createElement("code");
+    codeEl.className = "code-chip";
+    codeEl.textContent = code;
+    container.appendChild(codeEl);
+  }
+  if (note) {
+    const noteEl = document.createElement("span");
+    noteEl.className = "suggestion-note";
+    noteEl.textContent = note;
+    container.appendChild(noteEl);
+  }
 }
 
 // Disables (or re-enables) every "Generate suggestion" button except the
@@ -623,7 +648,9 @@ function renderAltResults({ items, truncated }) {
     } else {
       thumb.remove();
     }
-    srcEl.textContent = item.src ? `${item.kind}: ${item.src}` : `${item.kind} — no image source, needs manual review`;
+    srcEl.textContent = item.src
+      ? `🖼️ ${item.kind === "img" ? "Image" : item.kind}: ${item.src}`
+      : `🖼️ ${item.kind} — no image file to analyze, please check this one by hand`;
 
     if (!item.src) {
       generateBtn.disabled = true;
@@ -632,7 +659,6 @@ function renderAltResults({ items, truncated }) {
     }
 
     generateBtn.addEventListener("click", async () => {
-      const previousLabel = generateBtn.textContent;
       generateBtn.disabled = true;
       generateBtn.textContent = "Generating…";
       errorEl.hidden = true;
@@ -648,9 +674,10 @@ function renderAltResults({ items, truncated }) {
         const attrValue = `alt="${caption}"`;
 
         suggestionEl.hidden = false;
-        suggestionEl.textContent = isSmallIcon
-          ? `${attrValue} — small icon-sized image; if purely decorative, use alt="" instead`
-          : attrValue;
+        renderSuggestion(suggestionEl, {
+          lead: isSmallIcon ? "✨ Suggested description (this looks like a small icon — if it's purely decorative, use alt=\"\" instead):" : "✨ Suggested description:",
+          code: attrValue,
+        });
 
         // Copies the ready-to-paste attribute, not the bare caption text —
         // drop it straight into the <img> tag, no manual wrapping needed.
@@ -660,7 +687,7 @@ function renderAltResults({ items, truncated }) {
         generateBtn.textContent = "Regenerate";
       } catch (err) {
         errorEl.hidden = false;
-        errorEl.textContent = `Failed: ${err.message}`;
+        errorEl.textContent = `⚠️ Couldn't generate a description — ${err.message}`;
         generateBtn.textContent = "Retry";
       } finally {
         generateBtn.disabled = false;
@@ -694,22 +721,29 @@ function renderContrastResults({ items, truncated }) {
 
     fgSwatch.style.backgroundColor = item.foreground;
     bgSwatch.style.backgroundColor = item.background;
-    textEl.textContent = `<${item.tag}> "${item.text}"`;
-    metaEl.textContent = `${item.foreground} on ${item.background} — ratio ${item.ratio}:1 (needs ${item.required}:1)`;
+    textEl.textContent = `🎨 "${item.text}" (in a <${item.tag}> element)`;
+    metaEl.textContent = `Contrast ratio: ${item.ratio}:1 — needs at least ${item.required}:1 (currently ${item.foreground} on ${item.background})`;
 
     const uncertainNote = item.uncertain
-      ? " ⚠️ There's a background image behind this text — the ratio above only accounts for the fallback color, verify manually."
-      : "";
+      ? "⚠️ This text sits over a background image, so the ratio above only reflects the fallback color — please double-check it by eye."
+      : null;
 
     if (item.suggested) {
-      suggestionEl.textContent = `Suggested text color: ${item.suggested}${uncertainNote}`;
+      renderSuggestion(suggestionEl, {
+        lead: "✨ Try changing the text color to:",
+        code: `color: ${item.suggested};`,
+        note: uncertainNote,
+      });
       // Copies a ready-to-paste CSS declaration, not the bare hex value.
       copyBtn.hidden = false;
       copyBtn.textContent = "Copy CSS";
       copyBtn.dataset.value = `color: ${item.suggested};`;
       copyBtn.addEventListener("click", () => copyToClipboard(copyBtn, copyBtn.dataset.value));
     } else {
-      suggestionEl.textContent = `Couldn't fix by adjusting text color alone — try a different background.${uncertainNote}`;
+      renderSuggestion(suggestionEl, {
+        lead: "We couldn't fix this by changing the text color alone — try adjusting the background instead.",
+        note: uncertainNote,
+      });
     }
 
     contrastResults.appendChild(node);
@@ -731,11 +765,13 @@ function renderLabelResults({ items, truncated }) {
     const suggestionEl = node.querySelector(".item-suggestion");
     const copyBtn = node.querySelector(".btn-copy");
 
-    srcEl.textContent = `<${item.tag}${item.name ? ` name="${item.name}"` : ""} type="${item.type}">`;
+    const kind =
+      item.tag === "select" ? "dropdown" : item.tag === "textarea" ? "text area" : `${item.type} field`;
+    srcEl.textContent = `🏷️ This ${kind}${item.name ? ` (name="${item.name}")` : ""} has no label a screen reader can announce.`;
 
     if (item.suggestion) {
       const attrValue = `aria-label="${item.suggestion}"`;
-      suggestionEl.textContent = `Suggested: ${attrValue}`;
+      renderSuggestion(suggestionEl, { lead: "✨ Suggested fix — add this to the field:", code: attrValue });
       // Copies the ready-to-paste attribute — drop it straight onto the
       // existing <input>/<select>/<textarea> tag, no new <label> element needed.
       copyBtn.hidden = false;
@@ -743,7 +779,9 @@ function renderLabelResults({ items, truncated }) {
       copyBtn.dataset.value = attrValue;
       copyBtn.addEventListener("click", () => copyToClipboard(copyBtn, copyBtn.dataset.value));
     } else {
-      suggestionEl.textContent = "No placeholder or name attribute to suggest from — needs manual review.";
+      renderSuggestion(suggestionEl, {
+        lead: "We couldn't find a placeholder or name to suggest a label from — please add one by hand.",
+      });
     }
 
     labelResults.appendChild(node);
@@ -764,7 +802,11 @@ function renderLangResult(issue) {
   const copyBtn = node.querySelector(".btn-copy");
   const value = `lang="${issue.guess}"`;
 
-  suggestionEl.textContent = `Best guess: ${value} — verify this matches the page's actual content language before using it.`;
+  renderSuggestion(suggestionEl, {
+    lead: "🌐 This page doesn't say what language it's in. Our best guess:",
+    code: value,
+    note: "Please double-check this matches the page's real language before using it.",
+  });
   copyBtn.hidden = false;
   copyBtn.dataset.value = value;
   copyBtn.addEventListener("click", () => copyToClipboard(copyBtn, copyBtn.dataset.value));
@@ -787,10 +829,13 @@ function renderLinkResults({ items, truncated }) {
     const metaEl = node.querySelector(".item-meta");
     const suggestionEl = node.querySelector(".item-suggestion");
 
-    textEl.textContent = `"${item.text}"`;
-    metaEl.textContent = item.href;
-    suggestionEl.textContent =
-      "Needs manual review — replace with text describing the destination (e.g. \"Download the 2026 report\" instead of \"click here\").";
+    textEl.textContent = `🔗 A link just says "${item.text}"`;
+    metaEl.textContent = `Goes to: ${item.href}`;
+    renderSuggestion(suggestionEl, {
+      lead:
+        "This needs your judgment, so we won't auto-suggest a fix — but replace it with text that describes " +
+        "where it goes (e.g. \"Download the 2026 report\" instead of \"click here\").",
+    });
 
     linkResults.appendChild(node);
   });
@@ -810,10 +855,15 @@ function renderControlResults({ items, truncated }) {
     const textEl = node.querySelector(".item-text");
     const suggestionEl = node.querySelector(".item-suggestion");
 
-    const countNote = item.count > 1 ? ` — appears ${item.count} times with this exact markup` : "";
-    textEl.textContent = `<${item.tag}> ${item.identifier}${countNote}`;
-    suggestionEl.textContent =
-      "No text, aria-label, or title found — a screen reader can't tell what this does. Add an aria-label describing the action (e.g. aria-label=\"Close menu\").";
+    const elementWord = item.tag === "button" ? "button" : "link";
+    const countNote = item.count > 1 ? ` (this exact ${elementWord} appears ${item.count} times on the page)` : "";
+    textEl.textContent = `🔘 An unlabeled ${elementWord} → ${item.identifier}${countNote}`;
+    renderSuggestion(suggestionEl, {
+      lead:
+        "A screen reader has nothing to announce for this — there's no text, aria-label, or title. " +
+        "Describe what it does, for example:",
+      code: 'aria-label="Close menu"',
+    });
 
     controlResults.appendChild(node);
   });
@@ -867,7 +917,10 @@ async function scanActiveTab() {
     // report it for the main document.
     renderLangResult(mainFrame?.result?.missingLang ?? null);
   } catch (err) {
-    showBanner(`Scan failed: ${err.message}. Some pages (chrome:// URLs, the Web Store) can't be scanned.`, "error");
+    showBanner(
+      `⚠️ We couldn't scan this page (${err.message}). Note: some pages — like chrome:// pages or the Web Store — can't be scanned at all.`,
+      "error"
+    );
   } finally {
     scanBtn.disabled = false;
     scanBtnLabel.textContent = "Scan this page";

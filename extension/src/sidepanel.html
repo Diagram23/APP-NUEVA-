@@ -27,9 +27,9 @@
 
     <section id="intro-hint" class="intro-hint">
       <img src="icons/icon128.png" alt="" class="intro-mark" />
-      <p>Click <strong>Scan this page</strong> to check the current tab for the most common
-        accessibility issues — missing alt text, low-contrast text, unlabeled form fields,
-        missing page language, generic link text, and icon-only buttons/links.</p>
+      <p>👋 Ready when you are! Click <strong>Scan this page</strong> and we'll check it for the most
+        common accessibility issues: missing image descriptions, hard-to-read text, unlabeled form
+        fields, a missing page language, vague link text, and unlabeled buttons.</p>
     </section>
 
     <div id="results-wrapper" hidden>
@@ -119,7 +119,7 @@
     <template id="lang-item-template">
       <article class="item">
         <div class="item-body">
-          <div class="item-src">&lt;html&gt; is missing a lang attribute</div>
+          <div class="item-src">🌐 This page doesn't declare what language it's written in.</div>
           <div class="item-suggestion"></div>
           <div class="item-actions">
             <button class="btn btn-small btn-copy" hidden>Copy suggested attribute</button>
@@ -148,7 +148,7 @@
     </template>
 
     <footer class="app-footer">
-      <span>Runs 100% locally in your browser (WebAssembly/WebGPU + plain math). Nothing is uploaded anywhere.</span>
+      <span>🔒 Everything runs locally, right here in your browser. Nothing about this page is ever uploaded anywhere.</span>
     </footer>
 
     <script type="module" src="sidepanel.js"></script>
