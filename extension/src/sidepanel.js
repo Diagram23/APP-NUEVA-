@@ -269,7 +269,13 @@ function scanPageForA11yIssues() {
       if (!src) return;
       const w = el.naturalWidth || el.width || 0;
       const h = el.naturalHeight || el.height || 0;
-      if (w < MIN_IMG_SIZE || h < MIN_IMG_SIZE) return;
+      // Only skip on the "too small, probably a tracking pixel" heuristic
+      // once the browser has actually finished loading the image (img.complete).
+      // A lazy-loaded image below the fold reports naturalWidth/Height as 0
+      // until it scrolls into view — that's "not loaded yet", not "tiny".
+      // Treating those the same used to make every not-yet-loaded image on
+      // a long page invisible to the scanner.
+      if (el.complete && (w < MIN_IMG_SIZE || h < MIN_IMG_SIZE)) return;
       missingAltTotal++;
       cappedPush(missingAlt, { src, width: w, height: h, kind: isImageInput ? "input[type=image]" : "img" });
     } else {

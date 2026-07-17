@@ -32,6 +32,8 @@ const mainHtml = `<!doctype html>
 <html>
 <body>
   <img src="https://example.com/nonexistent-but-fine-for-dom-check.jpg" width="200" height="200">
+  <div style="height:4000px;">spacer to push the next image below the fold</div>
+  <img src="https://example.com/lazy-below-the-fold.jpg" loading="lazy">
   <p style="color:#000;background:#fff;">Normal contrast paragraph, should not be flagged.</p>
   <p style="color:#999999;background:#ffffff;">Low contrast paragraph, should be flagged.</p>
   <div style="background-image:url(data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7); color:#999;">Text over a background image</div>
@@ -123,7 +125,11 @@ async function main() {
     log("control count", controlCount);
     log("control items", controlItems);
 
-    assert.equal(altCount, "(2)", "expected 2 images missing alt: one in the main doc, one in shadow DOM");
+    assert.equal(altCount, "(3)", "expected 3: main doc image, a lazy below-the-fold image, and one in shadow DOM");
+    assert.ok(
+      altItems.some((t) => t.includes("lazy-below-the-fold")),
+      "an unloaded/lazy image (naturalWidth=0 because it hasn't loaded, not because it's tiny) must still be flagged"
+    );
     assert.ok(
       altItems.some((t) => t.includes("shadow-photo")),
       "shadow DOM image should be detected"
