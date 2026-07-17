@@ -104,9 +104,24 @@ body {
   font-size: 12px;
 }
 
-.summary {
+.category {
+  margin-bottom: 4px;
+}
+
+.category h2 {
+  font-size: 13px;
+  margin: 0;
+  padding: 4px 16px;
   color: var(--muted);
-  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.count {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .results {
@@ -151,6 +166,30 @@ body {
   color: var(--muted);
   word-break: break-all;
   margin-bottom: 6px;
+}
+
+.item-text {
+  font-size: 13px;
+  color: var(--fg);
+}
+
+.item-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.swatch-pair {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.swatch {
+  flex: 1;
 }
 
 .item-suggestion {

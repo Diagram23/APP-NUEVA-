@@ -8,19 +8,31 @@
   <body>
     <header class="app-header">
       <h1>AltFix AI</h1>
-      <p class="subtitle">In-browser WCAG alt-text auditor</p>
+      <p class="subtitle">Unlimited in-browser WCAG auditor — no credits, no limits</p>
     </header>
 
     <section id="status-banner" class="banner banner-info" hidden></section>
 
     <section class="controls">
       <button id="scan-btn" class="btn btn-primary">Scan this page</button>
-      <span id="scan-summary" class="summary"></span>
     </section>
 
-    <section id="results" class="results"></section>
+    <section class="category">
+      <h2>Images missing alt text <span id="alt-count" class="count"></span></h2>
+      <div id="alt-results" class="results"></div>
+    </section>
 
-    <template id="result-item-template">
+    <section class="category">
+      <h2>Low-contrast text <span id="contrast-count" class="count"></span></h2>
+      <div id="contrast-results" class="results"></div>
+    </section>
+
+    <section class="category">
+      <h2>Form fields without a label <span id="label-count" class="count"></span></h2>
+      <div id="label-results" class="results"></div>
+    </section>
+
+    <template id="alt-item-template">
       <article class="item">
         <div class="item-preview">
           <img class="item-thumb" alt="" />
@@ -37,8 +49,39 @@
       </article>
     </template>
 
+    <template id="contrast-item-template">
+      <article class="item">
+        <div class="item-preview">
+          <div class="swatch-pair">
+            <span class="swatch swatch-fg"></span>
+            <span class="swatch swatch-bg"></span>
+          </div>
+        </div>
+        <div class="item-body">
+          <div class="item-src item-text"></div>
+          <div class="item-meta"></div>
+          <div class="item-suggestion"></div>
+          <div class="item-actions">
+            <button class="btn btn-small btn-copy" hidden>Copy suggested color</button>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <template id="label-item-template">
+      <article class="item">
+        <div class="item-body">
+          <div class="item-src"></div>
+          <div class="item-suggestion"></div>
+          <div class="item-actions">
+            <button class="btn btn-small btn-copy" hidden>Copy suggested label</button>
+          </div>
+        </div>
+      </article>
+    </template>
+
     <footer class="app-footer">
-      <span>Runs 100% locally in your browser (WebAssembly/WebGPU). Nothing is uploaded anywhere.</span>
+      <span>Runs 100% locally in your browser (WebAssembly/WebGPU + plain math). Nothing is uploaded anywhere.</span>
     </footer>
 
     <script type="module" src="sidepanel.js"></script>
