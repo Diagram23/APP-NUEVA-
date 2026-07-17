@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AltFix AI</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>AltFix AI</h1>
+      <p class="subtitle">On-device WCAG alt-text auditor</p>
+    </header>
+
+    <section id="status-banner" class="banner banner-info" hidden></section>
+
+    <section class="controls">
+      <button id="scan-btn" class="btn btn-primary">Scan this page</button>
+      <span id="scan-summary" class="summary"></span>
+    </section>
+
+    <section id="results" class="results"></section>
+
+    <template id="result-item-template">
+      <article class="item">
+        <div class="item-preview">
+          <img class="item-thumb" alt="" />
+        </div>
+        <div class="item-body">
+          <div class="item-src"></div>
+          <div class="item-suggestion" hidden></div>
+          <div class="item-error" hidden></div>
+          <div class="item-actions">
+            <button class="btn btn-small btn-generate">Generate suggestion</button>
+            <button class="btn btn-small btn-copy" hidden>Copy</button>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <footer class="app-footer">
+      <span>Runs 100% locally via Chrome's built-in AI. Nothing is uploaded anywhere.</span>
+    </footer>
+
+    <script src="sidepanel.js"></script>
+  </body>
+</html>
