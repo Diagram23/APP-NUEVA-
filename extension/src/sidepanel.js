@@ -5,12 +5,16 @@ import { pipeline, env } from "@huggingface/transformers";
 // weights into the extension package itself.
 env.allowLocalModels = false;
 
-// Force the plain single-threaded WASM backend instead of the
-// multi-threaded one. The threaded variant tries to dynamically import an
-// extra loader script from jsdelivr's CDN at runtime, which the extension's
-// CSP (script-src 'self') correctly blocks — that's the
-// "Failed to fetch dynamically imported module" error. Single-threaded is
-// slower but loads entirely from the files we already bundled locally.
+// transformers.js hardcodes its WASM engine to fetch from jsdelivr's CDN
+// by default (onnx.js sets this the moment the library is imported, before
+// any of our own config runs) — the extension's CSP correctly blocks that
+// as a remote script. Point it at the copies we bundle in public/ instead
+// (see public/ort-wasm-simd-threaded.asyncify.{wasm,mjs}) and disable the
+// worker-proxy path, which needs cross-origin isolation we don't have here.
+env.backends.onnx.wasm.wasmPaths = {
+  wasm: chrome.runtime.getURL("ort-wasm-simd-threaded.asyncify.wasm"),
+  mjs: chrome.runtime.getURL("ort-wasm-simd-threaded.asyncify.mjs"),
+};
 env.backends.onnx.wasm.proxy = false;
 env.backends.onnx.wasm.numThreads = 1;
 
