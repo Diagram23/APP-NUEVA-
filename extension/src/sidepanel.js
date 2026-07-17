@@ -32,6 +32,14 @@ const labelCount = document.getElementById("label-count");
 const labelResults = document.getElementById("label-results");
 const labelTemplate = document.getElementById("label-item-template");
 
+const langCount = document.getElementById("lang-count");
+const langResults = document.getElementById("lang-results");
+const langTemplate = document.getElementById("lang-item-template");
+
+const linkCount = document.getElementById("link-count");
+const linkResults = document.getElementById("link-results");
+const linkTemplate = document.getElementById("link-item-template");
+
 let captionerPromise = null;
 
 function showBanner(message, kind = "info") {
@@ -254,7 +262,34 @@ function scanPageForA11yIssues() {
     });
   });
 
-  return { missingAlt, lowContrast, missingLabels };
+  // --- Missing page language ---
+  const htmlLang = document.documentElement.getAttribute("lang");
+  let missingLang = null;
+  if (!htmlLang || !htmlLang.trim()) {
+    const ogLocale = document.querySelector('meta[property="og:locale"]')?.getAttribute("content");
+    const metaLang = document
+      .querySelector('meta[http-equiv="content-language" i]')
+      ?.getAttribute("content");
+    const guess = (ogLocale || metaLang || navigator.language || "en").split(/[-_]/)[0];
+    missingLang = { guess };
+  }
+
+  // --- Generic / non-descriptive link text ---
+  const GENERIC_LINK_TEXTS = new Set([
+    "click here", "here", "read more", "more", "learn more", "link", "click",
+    "this link", "more info", "details", "continue", "more details",
+    "clic aquí", "click aquí", "aquí", "leer más", "ver más", "más información", "más info",
+  ]);
+
+  const genericLinks = [];
+  Array.from(document.querySelectorAll("a[href]")).forEach((a) => {
+    if (genericLinks.length >= MAX_CONTRAST_ITEMS) return;
+    const text = (a.textContent || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (!text || !GENERIC_LINK_TEXTS.has(text)) return;
+    genericLinks.push({ text: a.textContent.trim(), href: a.href });
+  });
+
+  return { missingAlt, lowContrast, missingLabels, missingLang, genericLinks };
 }
 
 function getCaptioner() {
@@ -421,6 +456,52 @@ function renderLabelResults(items) {
   });
 }
 
+function renderLangResult(issue) {
+  langCount.textContent = issue ? "(1)" : "(0)";
+  langResults.innerHTML = "";
+
+  if (!issue) {
+    langResults.innerHTML = `<p class="empty-state">Page declares a language. ✅</p>`;
+    return;
+  }
+
+  const node = langTemplate.content.cloneNode(true);
+  const suggestionEl = node.querySelector(".item-suggestion");
+  const copyBtn = node.querySelector(".btn-copy");
+  const value = `lang="${issue.guess}"`;
+
+  suggestionEl.textContent = `Best guess: ${value} — verify this matches the page's actual content language before using it.`;
+  copyBtn.hidden = false;
+  copyBtn.dataset.value = value;
+  copyBtn.addEventListener("click", () => copyToClipboard(copyBtn, copyBtn.dataset.value));
+
+  langResults.appendChild(node);
+}
+
+function renderLinkResults(items) {
+  linkCount.textContent = `(${items.length})`;
+  linkResults.innerHTML = "";
+
+  if (items.length === 0) {
+    linkResults.innerHTML = `<p class="empty-state">None found. ✅</p>`;
+    return;
+  }
+
+  items.forEach((item) => {
+    const node = linkTemplate.content.cloneNode(true);
+    const textEl = node.querySelector(".item-text");
+    const metaEl = node.querySelector(".item-meta");
+    const suggestionEl = node.querySelector(".item-suggestion");
+
+    textEl.textContent = `"${item.text}"`;
+    metaEl.textContent = item.href;
+    suggestionEl.textContent =
+      "Needs manual review — replace with text describing the destination (e.g. \"Download the 2026 report\" instead of \"click here\").";
+
+    linkResults.appendChild(node);
+  });
+}
+
 async function scanActiveTab() {
   scanBtn.disabled = true;
   scanBtn.textContent = "Scanning…";
@@ -437,6 +518,8 @@ async function scanActiveTab() {
     renderAltResults(result.missingAlt);
     renderContrastResults(result.lowContrast);
     renderLabelResults(result.missingLabels);
+    renderLangResult(result.missingLang);
+    renderLinkResults(result.genericLinks);
   } catch (err) {
     showBanner(`Scan failed: ${err.message}. Some pages (chrome:// URLs, the Web Store) can't be scanned.`, "error");
   } finally {

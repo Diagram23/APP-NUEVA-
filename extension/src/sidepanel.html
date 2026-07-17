@@ -32,6 +32,16 @@
       <div id="label-results" class="results"></div>
     </section>
 
+    <section class="category">
+      <h2>Missing page language <span id="lang-count" class="count"></span></h2>
+      <div id="lang-results" class="results"></div>
+    </section>
+
+    <section class="category">
+      <h2>Generic link text <span id="link-count" class="count"></span></h2>
+      <div id="link-results" class="results"></div>
+    </section>
+
     <template id="alt-item-template">
       <article class="item">
         <div class="item-preview">
@@ -76,6 +86,28 @@
           <div class="item-actions">
             <button class="btn btn-small btn-copy" hidden>Copy suggested label</button>
           </div>
+        </div>
+      </article>
+    </template>
+
+    <template id="lang-item-template">
+      <article class="item">
+        <div class="item-body">
+          <div class="item-src">&lt;html&gt; is missing a lang attribute</div>
+          <div class="item-suggestion"></div>
+          <div class="item-actions">
+            <button class="btn btn-small btn-copy" hidden>Copy suggested attribute</button>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <template id="link-item-template">
+      <article class="item">
+        <div class="item-body">
+          <div class="item-src item-text"></div>
+          <div class="item-meta"></div>
+          <div class="item-suggestion"></div>
         </div>
       </article>
     </template>
