@@ -68,6 +68,20 @@ body {
   background: var(--bg-raised);
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  flex-shrink: 0;
+}
+
 .app-header h1 {
   margin: 0;
   font-size: 17px;
@@ -115,10 +129,52 @@ body {
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.12s ease, opacity 0.12s ease, transform 0.05s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .btn:active:not(:disabled) {
   transform: translateY(1px);
+}
+
+.spinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: currentColor;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.intro-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 10px 28px 28px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.intro-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  opacity: 0.9;
+}
+
+.intro-hint strong {
+  color: var(--fg);
 }
 
 .btn-primary {
@@ -206,6 +262,24 @@ body {
   padding: 10px;
   box-shadow: var(--shadow);
   transition: border-color 0.15s ease;
+  animation: item-in 0.22s ease both;
+}
+
+@keyframes item-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item {
+    animation: none;
+  }
 }
 
 .item:hover {

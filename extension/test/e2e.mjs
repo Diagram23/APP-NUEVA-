@@ -95,13 +95,19 @@ async function main() {
     panel.on("console", (msg) => {
       if (/jsdelivr|Refused to load/i.test(msg.text())) jsdelivrErrors.push(msg.text());
     });
+    panel.on("pageerror", (err) => console.log("[panel pageerror]", err.message));
     await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
 
     await page.bringToFront();
     await panel.waitForTimeout(300);
     await panel.click("#scan-btn");
+    // Check the label span specifically, not the button's whole textContent —
+    // the button now wraps a label span + a spinner span, and the
+    // whitespace/newlines between those nested elements are themselves part
+    // of textContent, so a strict "=== 'Scan this page'" against the button
+    // itself never matches even once everything is visually correct.
     await panel.waitForFunction(
-      () => document.getElementById("scan-btn").textContent === "Scan this page",
+      () => document.querySelector("#scan-btn .btn-label").textContent === "Scan this page",
       { timeout: 15000 }
     );
 

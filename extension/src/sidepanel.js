@@ -24,6 +24,10 @@ const MAX_LIST_ITEMS = 30; // per category, per frame — keeps huge pages usabl
 
 const statusBanner = document.getElementById("status-banner");
 const scanBtn = document.getElementById("scan-btn");
+const scanBtnLabel = scanBtn.querySelector(".btn-label");
+const scanBtnSpinner = scanBtn.querySelector(".spinner");
+const introHint = document.getElementById("intro-hint");
+const resultsWrapper = document.getElementById("results-wrapper");
 
 const altCount = document.getElementById("alt-count");
 const altResults = document.getElementById("alt-results");
@@ -795,7 +799,8 @@ function mergeListResults(perFrameResults, maxItems) {
 
 async function scanActiveTab() {
   scanBtn.disabled = true;
-  scanBtn.textContent = "Scanning…";
+  scanBtnLabel.textContent = "Scanning…";
+  scanBtnSpinner.hidden = false;
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -812,6 +817,9 @@ async function scanActiveTab() {
     const mainFrame = frameResults.find((f) => f.frameId === 0) ?? frameResults[0];
     const results = frameResults.map((f) => f.result).filter(Boolean);
 
+    introHint.hidden = true;
+    resultsWrapper.hidden = false;
+
     renderAltResults(mergeListResults(results.map((r) => r.missingAlt), MAX_LIST_ITEMS));
     renderContrastResults(mergeListResults(results.map((r) => r.lowContrast), MAX_LIST_ITEMS));
     renderLabelResults(mergeListResults(results.map((r) => r.missingLabels), MAX_LIST_ITEMS));
@@ -825,7 +833,8 @@ async function scanActiveTab() {
     showBanner(`Scan failed: ${err.message}. Some pages (chrome:// URLs, the Web Store) can't be scanned.`, "error");
   } finally {
     scanBtn.disabled = false;
-    scanBtn.textContent = "Scan this page";
+    scanBtnLabel.textContent = "Scan this page";
+    scanBtnSpinner.hidden = true;
   }
 }
 

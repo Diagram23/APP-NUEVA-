@@ -7,15 +7,32 @@
   </head>
   <body>
     <header class="app-header">
-      <h1>AltFix AI</h1>
-      <p class="subtitle">Unlimited in-browser WCAG auditor — no credits, no limits</p>
+      <div class="brand">
+        <img src="icons/icon48.png" alt="" class="brand-mark" />
+        <div>
+          <h1>AltFix AI</h1>
+          <p class="subtitle">Unlimited in-browser WCAG auditor — no credits, no limits</p>
+        </div>
+      </div>
     </header>
 
     <section id="status-banner" class="banner banner-info" hidden></section>
 
     <section class="controls">
-      <button id="scan-btn" class="btn btn-primary">Scan this page</button>
+      <button id="scan-btn" class="btn btn-primary">
+        <span class="btn-label">Scan this page</span>
+        <span class="spinner" hidden></span>
+      </button>
     </section>
+
+    <section id="intro-hint" class="intro-hint">
+      <img src="icons/icon128.png" alt="" class="intro-mark" />
+      <p>Click <strong>Scan this page</strong> to check the current tab for the most common
+        accessibility issues — missing alt text, low-contrast text, unlabeled form fields,
+        missing page language, generic link text, and icon-only buttons/links.</p>
+    </section>
+
+    <div id="results-wrapper" hidden>
 
     <section class="category">
       <h2><span class="icon">🖼️</span> Images missing alt text <span id="alt-count" class="count"></span></h2>
@@ -46,6 +63,8 @@
       <h2><span class="icon">🔘</span> Icon-only buttons/links without a label <span id="control-count" class="count"></span></h2>
       <div id="control-results" class="results"></div>
     </section>
+
+    </div>
 
     <template id="alt-item-template">
       <article class="item">
